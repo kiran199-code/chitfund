@@ -1,0 +1,32 @@
+chit.events.read|Read the chit event feed (portal, notifications and reporting consumers)|LOW
+chit.ledger.read|Read journals and the trial balance of a chit group|LOW
+chit.maintenance.reset|Read the maintenance status and clear all chit data (non-production only; also needs CHIT_RESET_ENABLED=true)|HIGH
+chit.group.read|Read groups, rules versions, the cycle calendar, the enrolment quote and the activation check; preview rules|LOW
+chit.group.write|Create a group, change its rules while DRAFT or OPEN_FOR_ENROLMENT, open enrolment|MEDIUM
+chit.group.activate|Activate a FULL group: freezes the rules and creates the cycle calendar and ledger accounts|HIGH
+chit.group.cancel|Cancel a group before it starts and refund fees and deposits|HIGH
+chit.enrolment.read|Read the tickets of a group with their fees and security|LOW
+chit.enrolment.write|Enrol a ticket (records fees and deposit and posts them to the ledger) and withdraw a ticket before activation|MEDIUM
+chit.enrolment.verify|Verify the security recorded for a ticket (checker; must differ from whoever recorded it)|HIGH
+chit.demand.read|Read the demands of a group and the dues across groups (upcoming, overdue, open)|LOW
+chit.statement.read|Read a ticket's account, a group's cycle-by-cycle collection and the late-fee preview|LOW
+chit.payment.read|Read payments and receipts|LOW
+chit.payment.write|Record money received for a ticket; it is applied to the ledger and to the ticket's demands|HIGH
+chit.payment.reverse|Reverse a payment (for example a bounced cheque); reopens the demands it paid and mirrors the ledger entry|HIGH
+chit.default.read|Read default cases|LOW
+chit.batch.run|Run the daily demand, late-fee and default jobs (also by an operator)|HIGH
+chit.calendar.read|Read the business date, whether a date is a working day, and the holiday list|LOW
+chit.calendar.write|Add, rename or remove a holiday|MEDIUM
+chit.businessdate.advance|Start end of day and advance the business date (the end-of-day batch)|HIGH
+chit.businessdate.set|Move the business date forward by hand (non-production only; also needs CHIT_RESET_ENABLED=true)|HIGH
+chit.auction.read|Read an auction (bids; sealed amounts stay hidden while it is open), its gate, the recorded draws and the foreman's covers|LOW
+chit.auction.open|Open the auction of a cycle once its quorum gate allows (may post a foreman cover for unpaid instalments)|HIGH
+chit.auction.bid|Record or withdraw a bid on a member's behalf while the auction is open|MEDIUM
+chit.auction.close|Close the auction: decides the winner, splits the pot and posts it to the ledger (cannot be undone)|HIGH
+chit.payout.read|Read prize payouts and the pool's liquidity position|LOW
+chit.payout.request|Request the prize payout (maker)|HIGH
+chit.payout.approve|Approve or reject a prize payout (checker; must differ from the requester while CHIT_MAKER_CHECKER_ENFORCE is true)|HIGH
+chit.payout.disburse|Pay out an approved prize, in one or more legs|HIGH
+chit.payout.float|Repay the foreman's float from the pool|HIGH
+chit.dividend.read|Read the dividends declared for a group or a ticket|LOW
+chit.dividend.pay|Pay out a cycle's dividends in cash (groups whose dividend mode is PAY_OUT)|HIGH

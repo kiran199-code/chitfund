@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: chitfund-admin-service
+
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+server:
+  port: ${SERVER_PORT:8088}
+  compression:
+    enabled: true
+
+# This service has no database. Everything it shows and does goes through chitfund-service and chitfund-batch-service.
+
+# Admin login (HTTP Basic; can do everything). Override both in every real environment.
+admin:
+  username: ${ADMIN_USERNAME:admin}
+  password: ${ADMIN_PASSWORD:changeme}
+  # Operations logins. Each exists only when its password is set. Both get every inquiry plus their own area:
+  # chit-ops: create and activate groups, enrol, record and reverse payments, edit holidays;
+  # batch-ops: end of day and the batch jobs.
+  chit-ops:
+    username: ${CHIT_OPS_USERNAME:chit-ops}
+    password: ${CHIT_OPS_PASSWORD:}
+  batch-ops:
+    username: ${BATCH_OPS_USERNAME:batch-ops}
+    password: ${BATCH_OPS_PASSWORD:}
+  timezone: ${ADMIN_TIMEZONE:Asia/Kolkata}
+
+# The chit screens, the business date and the holiday list: all done through chitfund-service's own API.
+chit:
+  service:
+    base-url: ${CHIT_SERVICE_URL:}
+    username: ${CHIT_SERVICE_USERNAME:chit-service}
+    password: ${CHIT_SERVICE_PASSWORD:}
+
+# End of day, the job list and clearing the job history: done through chitfund-batch-service's own admin API.
+batch:
+  service:
+    base-url: ${BATCH_SERVICE_URL:}
+    username: ${BATCH_ADMIN_USERNAME:batch-admin}
+    password: ${BATCH_ADMIN_PASSWORD:}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

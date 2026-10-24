@@ -1,0 +1,66 @@
+package com.chitfund.batch.web;
+
+import com.chitfund.batch.core.eod.EndOfDayCoordinator;
+import com.chitfund.batch.core.eod.EodRunSummary;
+import com.chitfund.batch.chit.ChitServiceClient;
+import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/**
+ * Run end of day on demand and see where it stands. Secured with the rest of /api/v1/batch-admin
+ * (HTTP Basic, ROLE_BATCH_ADMIN). Starting a run returns immediately (202); poll {@code /eod/status}.
+ */
+@RestController
+@RequestMapping("/api/v1/batch-admin/eod")
+@RequiredArgsConstructor
+public class EndOfDayController {
+
+    private final EndOfDayCoordinator coordinator;
+
+    /**
+     * Starts end of day for the current business date, or resumes a failed one. 409 if a run is already in progress, or if
+     * {@code expectedBusinessDate} is given and is not the current business date (so a stale screen cannot close the wrong day).
+     */
+    @PostMapping("/run")
+    public ResponseEntity<Map<String, Object>> run(
+            @RequestParam(value = "expectedBusinessDate", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate expectedBusinessDate) {
+        boolean started;
+        try {
+            started = coordinator.trigger("batch-admin", expectedBusinessDate);
+        } catch (EndOfDayCoordinator.StaleBusinessDateException e) {
+            Map<String, Object> stale = new LinkedHashMap<>();
+            stale.put("started", false);
+            stale.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(stale);
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("started", started);
+        body.put("message", started ? "End of day started; poll /api/v1/batch-admin/eod/status"
+                : "End of day is already running");
+        return ResponseEntity.status(started ? HttpStatus.ACCEPTED : HttpStatus.CONFLICT).body(body);
+    }
+
+    @GetMapping("/status")
+    public Map<String, Object> status() {
+        ChitServiceClient.BusinessDateInfo date = coordinator.businessDate();
+        EodRunSummary last = coordinator.lastRun();
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("running", coordinator.isRunning());
+        body.put("businessDate", date);
+        body.put("lastRun", last);
+        body.put("progress", coordinator.progress());
+        return body;
+    }
+}

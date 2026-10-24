@@ -1,0 +1,95 @@
+# Local dev environment for the chit fund: PostgreSQL and the three services. Not a deployment artifact (see render.yaml).
+#
+# Usage:
+#   docker compose up --build
+#   chitfund-service:        http://localhost:8086  (Swagger UI at /swagger-ui.html; HTTP Basic chit-service / changeme)
+#   chitfund-batch-service:  http://localhost:8087  (admin API under /api/v1/batch-admin; HTTP Basic batch-admin / changeme)
+#   chitfund-admin-service:  http://localhost:8088  (operations console; login admin / changeme)
+#
+# One PostgreSQL database, "chitfund", with two schemas: "chit" (chitfund-service) and "batch" (chitfund-batch-service).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: chitfund
+      POSTGRES_USER: chitfund
+      POSTGRES_PASSWORD: chitfund
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chitfund -d chitfund"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  chitfund-service:
+    build:
+      context: ./chitfund-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_NAME: chitfund
+      DB_USER: chitfund
+      DB_PASSWORD: chitfund
+      CHIT_SERVICE_USERNAME: chit-service
+      CHIT_SERVICE_PASSWORD: changeme
+      CHIT_RESET_ENABLED: "true"        # local only: allows Maintenance > Clear all data and setting the business date by hand
+    ports:
+      - "8086:8086"
+
+  chitfund-batch-service:
+    build:
+      context: ./chitfund-batch-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      chitfund-service:
+        condition: service_started
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_HOST: postgres
+      DB_NAME: chitfund
+      DB_USERNAME: chitfund
+      DB_PASSWORD: chitfund
+      DB_POOL_SIZE: "20"
+      DB_POOL_MIN_IDLE: "4"
+      QUARTZ_THREAD_COUNT: "3"
+      BATCH_KAFKA_ENABLED: "false"      # no broker in this project's local setup
+      KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+      BATCH_ADMIN_USERNAME: batch-admin
+      BATCH_ADMIN_PASSWORD: changeme
+      BATCH_RESET_ENABLED: "true"       # local only
+      CHIT_SERVICE_URL: http://chitfund-service:8086
+      CHIT_SERVICE_USERNAME: chit-service
+      CHIT_SERVICE_PASSWORD: changeme
+    ports:
+      - "8087:8087"
+
+  chitfund-admin-service:
+    build:
+      context: ./chitfund-admin-service
+    depends_on:
+      - chitfund-service
+      - chitfund-batch-service
+    environment:
+      SERVER_PORT: "8088"
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: changeme
+      CHIT_OPS_PASSWORD: changeme       # login chit-ops
+      BATCH_OPS_PASSWORD: changeme      # login batch-ops
+      CHIT_SERVICE_URL: http://chitfund-service:8086
+      CHIT_SERVICE_USERNAME: chit-service
+      CHIT_SERVICE_PASSWORD: changeme
+      BATCH_SERVICE_URL: http://chitfund-batch-service:8087
+      BATCH_ADMIN_USERNAME: batch-admin
+      BATCH_ADMIN_PASSWORD: changeme
+    ports:
+      - "8088:8088"
+
+volumes:
+  pgdata:

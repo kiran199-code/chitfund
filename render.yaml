@@ -1,0 +1,158 @@
+# Render Blueprint for the chit fund: its own Postgres and the three Spring Boot services, all in one region so the
+# services reach the database over Render's private network.
+#
+# Free-tier trade-offs (this is a try-it setup, not production):
+#  - Free web services sleep after ~15 min idle (the first request wakes them in about a minute). The batch service's
+#    nightly end of day will not fire while it sleeps: run it from the admin console (End of day > Start).
+#  - Free Postgres is deleted 30 days after creation unless upgraded. Render also allows only ONE free Postgres per
+#    account: if the lending platform's database already uses it, upgrade this one (plan: basic-256mb or higher) or point DB_*
+#    at a database from elsewhere.
+#  - 512 MB RAM per service: the JVM heap is capped explicitly below.
+databases:
+  - name: chitfund-db
+    plan: free
+    region: singapore
+    databaseName: chitfund
+    user: chitfund_app
+    ipAllowList: []   # private network only
+
+services:
+  # ---- chitfund-service: the chit API, ledger, business date and calendar ------------------------------------------
+  - type: web
+    name: chitfund-service
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./chitfund-service/Dockerfile
+    dockerContext: ./chitfund-service
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: DB_HOST
+        fromDatabase: { name: chitfund-db, property: host }
+      - key: DB_PORT
+        fromDatabase: { name: chitfund-db, property: port }
+      - key: DB_NAME
+        fromDatabase: { name: chitfund-db, property: database }
+      - key: DB_USER
+        fromDatabase: { name: chitfund-db, property: user }
+      - key: DB_PASSWORD
+        fromDatabase: { name: chitfund-db, property: password }
+      - key: CHIT_DB_SCHEMA
+        value: chit
+      - key: CHIT_DB_POOL_SIZE
+        value: "5"
+      - key: CHIT_SERVICE_USERNAME
+        value: chit-service
+      - key: CHIT_SERVICE_PASSWORD
+        generateValue: true   # the batch and admin services read it from here (see below)
+      # MANAGED: the business date is stored and moved forward by end of day. Use SYSTEM only when running for real
+      # (the date then follows the wall clock and cannot be moved by hand).
+      - key: CHIT_BUSINESS_DATE_MODE
+        value: MANAGED
+      - key: CHIT_TIMEZONE
+        value: Asia/Kolkata
+      - key: CHIT_WEEKEND_DAYS
+        value: SATURDAY,SUNDAY
+      # Sandbox only: allows Maintenance > Clear all data and setting the business date by hand. Remove (or "false")
+      # where the data matters.
+      - key: CHIT_RESET_ENABLED
+        value: "true"
+      - key: JAVA_TOOL_OPTIONS
+        value: "-Xmx256m -Xss512k -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
+
+  # ---- chitfund-batch-service: the three daily chit jobs and end of day ---------------------------------------------
+  - type: web
+    name: chitfund-batch-service
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./chitfund-batch-service/Dockerfile
+    dockerContext: ./chitfund-batch-service
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: SERVER_PORT
+        value: "10000"
+      - key: DB_HOST
+        fromDatabase: { name: chitfund-db, property: host }
+      - key: DB_PORT
+        fromDatabase: { name: chitfund-db, property: port }
+      - key: DB_NAME
+        fromDatabase: { name: chitfund-db, property: database }
+      - key: DB_USERNAME
+        fromDatabase: { name: chitfund-db, property: user }
+      - key: DB_PASSWORD
+        fromDatabase: { name: chitfund-db, property: password }
+      # Quartz (clustered JDBC store), Spring Batch metadata and the running jobs each need connections.
+      - key: DB_POOL_SIZE
+        value: "15"
+      - key: DB_POOL_MIN_IDLE
+        value: "3"
+      - key: QUARTZ_THREAD_COUNT
+        value: "3"
+      - key: BATCH_SWAGGER_ENABLED
+        value: "true"
+      # No broker on this setup: Kafka publishing is switched off.
+      - key: BATCH_KAFKA_ENABLED
+        value: "false"
+      - key: KAFKA_BOOTSTRAP_SERVERS
+        value: "localhost:9092"
+      - key: BATCH_KAFKA_MAX_BLOCK_MS
+        value: "1000"
+      - key: BATCH_ADMIN_USERNAME
+        value: batch-admin
+      - key: BATCH_ADMIN_PASSWORD
+        generateValue: true   # the admin service reads it from here
+      # Sandbox only: lets Maintenance clear the job history together with the chit data.
+      - key: BATCH_RESET_ENABLED
+        value: "true"
+      # Required: the prod profile refuses to start without it. The public address of chitfund-service
+      # (Render dashboard > chitfund-service), https://chitfund-service-XXXX.onrender.com, no trailing slash.
+      - key: CHIT_SERVICE_URL
+        sync: false
+      - key: CHIT_SERVICE_USERNAME
+        value: chit-service
+      - key: CHIT_SERVICE_PASSWORD
+        fromService: { type: web, name: chitfund-service, envVarKey: CHIT_SERVICE_PASSWORD }
+      - key: JAVA_TOOL_OPTIONS
+        value: "-Xmx256m -Xss512k -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
+
+  # ---- chitfund-admin-service: the operations console (React UI and its API), no database -----------------------------
+  - type: web
+    name: chitfund-admin-service
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./chitfund-admin-service/Dockerfile
+    dockerContext: ./chitfund-admin-service
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SERVER_PORT
+        value: "10000"
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_PASSWORD
+        generateValue: true   # read it in the Render dashboard > Environment
+      # Operations logins (each gets every inquiry plus its own area). Passwords are generated; read them in the dashboard.
+      - key: CHIT_OPS_PASSWORD
+        generateValue: true   # user chit-ops: groups, enrolment, payments, holidays
+      - key: BATCH_OPS_PASSWORD
+        generateValue: true   # user batch-ops: batch jobs, end of day
+      # Public addresses of the two services it talks to (Render dashboard), no trailing slash.
+      - key: CHIT_SERVICE_URL
+        sync: false
+      - key: CHIT_SERVICE_USERNAME
+        value: chit-service
+      - key: CHIT_SERVICE_PASSWORD
+        fromService: { type: web, name: chitfund-service, envVarKey: CHIT_SERVICE_PASSWORD }
+      - key: BATCH_SERVICE_URL
+        sync: false
+      - key: BATCH_ADMIN_USERNAME
+        value: batch-admin
+      - key: BATCH_ADMIN_PASSWORD
+        fromService: { type: web, name: chitfund-batch-service, envVarKey: BATCH_ADMIN_PASSWORD }
+      - key: JAVA_TOOL_OPTIONS
+        value: "-Xmx256m -Xss512k -XX:+UseSerialGC -XX:TieredStopAtLevel=1"

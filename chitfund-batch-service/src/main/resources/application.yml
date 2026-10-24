@@ -1,0 +1,121 @@
+# Profile-agnostic defaults shared by every environment. Activate a profile with
+# --spring.profiles.active=local (default for `mvn spring-boot:run` / IDE runs) or
+# --spring.profiles.active=prod (see application-prod.yml and the README "Running" section).
+spring:
+  application:
+    name: chitfund-batch-service
+
+  # Job execution is driven exclusively by QuartzJobBridge (cron) and BatchAdminController
+  # (manual trigger) — never by Spring Boot's "run every discovered Job at startup" default.
+  batch:
+    job:
+      enabled: false
+    jdbc:
+      # BATCH_JOB_INSTANCE / BATCH_JOB_EXECUTION / ... created on first startup, into the
+      # 'batch' schema via the JDBC URL's currentSchema search_path (see each profile's
+      # datasource.url). Safe to leave 'always' across repeated startups: Boot only runs the
+      # scripts once the tables are confirmed absent.
+      initialize-schema: always
+
+  quartz:
+    job-store-type: jdbc
+    # We own the QRTZ_* DDL ourselves (V3__quartz_schema.sql) so it ships through the same
+    # Flyway pipeline as the rest of the batch schema instead of Quartz's own bootstrap script.
+    jdbc:
+      initialize-schema: never
+    properties:
+      org.quartz.scheduler.instanceName: ChitfundBatchScheduler
+      org.quartz.scheduler.instanceId: AUTO
+      org.quartz.jobStore.class: org.springframework.scheduling.quartz.LocalDataSourceJobStore
+      org.quartz.jobStore.driverDelegateClass: org.quartz.impl.jdbcjobstore.PostgreSQLDelegate
+      org.quartz.jobStore.tablePrefix: batch.QRTZ_
+      org.quartz.jobStore.useProperties: false
+      org.quartz.jobStore.isClustered: true
+      org.quartz.jobStore.clusterCheckinInterval: 20000
+      org.quartz.jobStore.misfireThreshold: 60000
+      org.quartz.threadPool.class: org.quartz.simpl.SimpleThreadPool
+      org.quartz.threadPool.threadCount: ${QUARTZ_THREAD_COUNT:10}
+      org.quartz.threadPool.threadPriority: 5
+
+  flyway:
+    schemas: batch
+    default-schema: batch
+    create-schemas: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+
+# Admin/ops REST layer under /api/v1/batch-admin — see SecurityConfig. Override the password in
+# every real environment; the default below only exists so `local` boots without extra setup.
+batch:
+  admin:
+    username: ${BATCH_ADMIN_USERNAME:batch-admin}
+    password: ${BATCH_ADMIN_PASSWORD:changeme}
+  # Business date and end of day. Jobs run for the chitfund service's business date (not the calendar date).
+  # With eod.enabled, the DAILY jobs are not started by their own crons: one nightly end-of-day run
+  # (cron below) runs them in priority order for the current business date, and only when all have
+  # completed moves the business date forward. POST /api/v1/batch-admin/eod/run does the same on demand.
+  business-date:
+    source: ${BATCH_BUSINESS_DATE_SOURCE:CHIT}   # CHIT | SYSTEM (wall clock; standalone use only)
+    system-timezone: ${BATCH_SYSTEM_TIMEZONE:Asia/Kolkata}
+  eod:
+    enabled: ${BATCH_EOD_ENABLED:true}
+    cron: ${BATCH_EOD_CRON:0 0 1 * * ?}
+    zone: ${BATCH_EOD_ZONE:Asia/Kolkata}
+    # End of day waits for each job to reach a final state before starting the next one.
+    job-timeout-minutes: ${BATCH_EOD_JOB_TIMEOUT_MINUTES:180}
+    poll-interval-ms: ${BATCH_EOD_POLL_INTERVAL_MS:1000}
+  # Start from scratch (admin console, Maintenance): lets POST /api/v1/batch-admin/maintenance/clear-data empty the job
+  # execution history. Off unless BATCH_RESET_ENABLED=true; set it only in sandbox and test environments.
+  maintenance:
+    reset-enabled: ${BATCH_RESET_ENABLED:false}
+
+# The chitfund service is the only writer of chit data: the jobs and end of day call its REST API and the batch service never
+# touches the chit tables. base-url comes from CHIT_SERVICE_URL, required in the prod profile and defaulted to localhost:8086
+# elsewhere. The credential is the chitfund service's own Basic login (CHIT_SERVICE_USERNAME / CHIT_SERVICE_PASSWORD there) and
+# is only sent when a username is configured.
+chit:
+  service:
+    base-url: ${CHIT_SERVICE_URL:http://localhost:8086}
+    username: ${CHIT_SERVICE_USERNAME:}
+    password: ${CHIT_SERVICE_PASSWORD:}
+    connect-timeout-seconds: ${CHIT_SERVICE_CONNECT_TIMEOUT_SECONDS:5}
+    # A run touches every group, and the Render free plan cold-starts in about a minute, so the default is generous.
+    request-timeout-seconds: ${CHIT_SERVICE_REQUEST_TIMEOUT_SECONDS:240}
+    max-attempts: ${CHIT_SERVICE_MAX_ATTEMPTS:4}
+    retry-backoff-millis: ${CHIT_SERVICE_RETRY_BACKOFF_MILLIS:500}
+
+# Swagger UI at /swagger-ui.html, OpenAPI JSON at /v3/api-docs. Both sit behind the same HTTP Basic login as the admin API (the browser
+# asks for batch-admin / BATCH_ADMIN_PASSWORD, then "Try it out" reuses it). Switch off with BATCH_SWAGGER_ENABLED=false.
+springdoc:
+  swagger-ui:
+    enabled: ${BATCH_SWAGGER_ENABLED:true}
+    path: /swagger-ui.html
+  api-docs:
+    enabled: ${BATCH_SWAGGER_ENABLED:true}
+    path: /v3/api-docs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
+  level:
+    root: INFO
+    com.chitfund.batch: INFO
+    org.springframework.batch: INFO
+    org.quartz: WARN

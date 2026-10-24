@@ -1,0 +1,62 @@
+spring:
+  application:
+    name: chitfund-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:chitfund}
+    username: ${DB_USER:chitfund}
+    password: ${DB_PASSWORD:chitfund}
+    hikari:
+      # Every connection runs with search_path = chit, so repositories use unqualified table names.
+      schema: ${CHIT_DB_SCHEMA:chit}
+      maximum-pool-size: ${CHIT_DB_POOL_SIZE:20}
+  flyway:
+    schemas: ${CHIT_DB_SCHEMA:chit}
+    default-schema: ${CHIT_DB_SCHEMA:chit}
+    create-schemas: true
+    table: chit_schema_history
+    locations: classpath:db/migration
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+
+server:
+  port: ${PORT:8086}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+
+# Service-to-service credential (HTTP Basic). The batch service and the admin app send it.
+# Replace with a JWT resource server when an identity provider is added: only
+# config/SecurityConfig changes; the X-Actor header is then taken from the token subject.
+chit:
+  security:
+    username: ${CHIT_SERVICE_USERNAME:chit-service}
+    password: ${CHIT_SERVICE_PASSWORD:changeme}
+  maker-checker:
+    enforce: ${CHIT_MAKER_CHECKER_ENFORCE:true}
+  events:
+    max-page-size: 500
+  # Start-from-scratch (POST /api/v1/chit/maintenance/clear-data). Off unless you turn it on, so a production
+  # deployment cannot be emptied by accident. The admin console's Maintenance screen needs it on here as well as on
+  # the other services.
+  maintenance:
+    reset-enabled: ${CHIT_RESET_ENABLED:false}
+
+  # The business date and the working-day calendar belong to this service.
+  # MANAGED (default): the date is stored and moved forward by end of day (the batch service does it each night; the admin
+  # console can too), so a test environment can run ahead of the wall clock. SYSTEM: the date is the wall-clock date in the
+  # time zone below and is never stored; use it when the service runs for real.
+  business-date:
+    mode: ${CHIT_BUSINESS_DATE_MODE:MANAGED}
+    timezone: ${CHIT_TIMEZONE:Asia/Kolkata}
+  calendar:
+    # Days that are never working days. Holidays are added on top in the chit_holiday table (admin console, Business date).
+    weekend: ${CHIT_WEEKEND_DAYS:SATURDAY,SUNDAY}
+  enrolment:
+    # Does a ticket that withdraws before the group starts get its enrolment and registration fees back? Its deposit
+    # always comes back. Cancelling the whole group always refunds everything.
+    withdrawal-refunds-fees: ${CHIT_WITHDRAWAL_REFUNDS_FEES:false}

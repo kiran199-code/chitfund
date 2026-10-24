@@ -1,0 +1,123 @@
+package com.chitfund.batch.core.launch;
+
+import com.chitfund.batch.core.BatchJobRegistry;
+import com.chitfund.batch.core.BusinessDateProvider;
+import com.chitfund.batch.domain.BatchJobConfig;
+import com.chitfund.batch.repository.BatchJobConfigRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.batch.core.Job;
+import org.springframework.batch.core.JobExecution;
+import org.springframework.batch.core.JobParameters;
+import org.springframework.batch.core.JobParametersBuilder;
+import org.springframework.batch.core.explore.JobExplorer;
+import org.springframework.batch.core.launch.JobLauncher;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDate;
+import java.util.Set;
+import java.util.UUID;
+
+/**
+ * The single entry point every trigger path (Quartz, ad-hoc REST, backdated re-run) goes
+ * through to actually start a job — the idempotency guard and businessDate/restart parameter
+ * rules live here exactly once, rather than being duplicated in QuartzJobBridge and
+ * BatchAdminController.
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class BatchJobLauncherService {
+
+    private final JobLauncher jobLauncher;
+    private final JobExplorer jobExplorer;
+    private final BatchJobRegistry batchJobRegistry;
+    private final BatchJobConfigRepository batchJobConfigRepository;
+    private final BusinessDateProvider businessDateProvider;
+
+    /**
+     * When true, DAILY jobs are driven by the end-of-day orchestrator (one chain, in priority order,
+     * then the business date advances) and their individual Quartz crons are ignored.
+     */
+    @Value("${batch.eod.enabled:true}")
+    private boolean eodOrchestrationEnabled;
+
+    /**
+     * Quartz-triggered run for the current business date, with the configured default job_params_json.
+     * Returns null (nothing launched) for a DAILY job while end-of-day orchestration is enabled — the
+     * orchestrator runs those in order and advances the business date.
+     */
+    public JobExecution launchScheduled(String jobName) throws Exception {
+        if (eodOrchestrationEnabled) {
+            BatchJobConfig config = batchJobConfigRepository.findByJobName(jobName).orElse(null);
+            if (config != null && config.getJobCategory() == BatchJobConfig.JobCategory.DAILY) {
+                log.info("Skipping cron launch of daily job {}: it is run by the end-of-day orchestrator", jobName);
+                return null;
+            }
+        }
+        return launch(jobName, businessDateProvider.current(), "SCHEDULED", null);
+    }
+
+    /** Launch as part of the end-of-day chain for {@code businessDate}. */
+    public JobExecution launchForEndOfDay(String jobName, LocalDate businessDate) throws Exception {
+        return launch(jobName, businessDate, "EOD", null);
+    }
+
+    /** Ad-hoc/backdated run from the admin API — businessDate is caller-supplied (defaults to the current business date if null), using the configured default job_params_json. */
+    public JobExecution launchManual(String jobName, LocalDate businessDate) throws Exception {
+        return launch(jobName, businessDate != null ? businessDate : businessDateProvider.current(), "MANUAL", null);
+    }
+
+    /**
+     * Ad-hoc/backdated run with a per-launch job_params_json override — the path event-triggered
+     * jobs use to receive their invocation context (e.g. {@code {"groupCode": "GROUP_1"}}) since they
+     * have no cron schedule to pick up a static config value from. jobParamsOverride replaces
+     * (not merges with) the batch_job_config default for this run only; pass null to fall back to
+     * the configured default.
+     */
+    public JobExecution launchManual(String jobName, LocalDate businessDate, String jobParamsOverride) throws Exception {
+        return launch(jobName, businessDate != null ? businessDate : businessDateProvider.current(), "MANUAL", jobParamsOverride);
+    }
+
+    private JobExecution launch(String jobName, LocalDate businessDate, String triggeredBy, String jobParamsOverride) throws Exception {
+        BatchJobConfig config = batchJobConfigRepository.findByJobName(jobName)
+                .orElseThrow(() -> new IllegalArgumentException("No batch_job_config row for job " + jobName));
+        if (!Boolean.TRUE.equals(config.getEnabled())) {
+            throw new IllegalStateException("Job " + jobName + " is disabled — enable it in batch_job_config first");
+        }
+
+        // Idempotency guard: refuse to start a second concurrent run of the same job_name.
+        Set<JobExecution> running = jobExplorer.findRunningJobExecutions(jobName);
+        if (!running.isEmpty()) {
+            throw new IllegalStateException("Job " + jobName + " already has a RUNNING execution (id="
+                    + running.iterator().next().getId() + ") — refusing to start a duplicate run");
+        }
+
+        String effectiveJobParamsJson = jobParamsOverride != null
+                ? jobParamsOverride
+                : (config.getJobParamsJson() != null ? config.getJobParamsJson() : "{}");
+
+        Job job = batchJobRegistry.getJob(jobName);
+        // Only businessDate (and, for non-restartable jobs, runId) identify the JobInstance —
+        // triggeredBy and jobParamsJson ride along as non-identifying parameters so a MANUAL
+        // retry of a SCHEDULED run (or a retry with a param override) still resumes the same
+        // JobInstance for a restartable job, per the businessDate-only restart contract described
+        // in the README.
+        JobParametersBuilder params = new JobParametersBuilder()
+                .addString("businessDate", businessDate.toString())
+                .addString("triggeredBy", triggeredBy, false)
+                .addString("jobParamsJson", effectiveJobParamsJson, false);
+
+        // restartable=false jobs get a unique nonce so a re-run always starts a fresh JobInstance
+        // instead of Spring Batch trying to resume a (by design, non-resumable) prior attempt.
+        if (!Boolean.TRUE.equals(config.getRestartable())) {
+            params.addString("runId", UUID.randomUUID().toString());
+        }
+
+        JobParameters jobParameters = params.toJobParameters();
+        log.info("Launching job={} businessDate={} triggeredBy={} restartable={} paramsOverridden={}",
+                jobName, businessDate, triggeredBy, config.getRestartable(), jobParamsOverride != null);
+        return jobLauncher.run(job, jobParameters);
+    }
+}

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.chitfund</groupId>
+    <artifactId>chitfund-platform</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>chitfund-platform</name>
+    <description>
+        Aggregator build for the chit fund services. `mvn clean package` from this directory builds every module in one
+        pass. This POM is deliberately not the Maven parent of the modules: each keeps its own spring-boot-starter-parent
+        (all three target Java 17), so each can also be built and deployed on its own from its own directory.
+        The admin module's React UI is built by its Dockerfile (npm), not by Maven.
+    </description>
+
+    <modules>
+        <module>chitfund-service</module>
+        <module>chitfund-batch-service</module>
+        <module>chitfund-admin-service</module>
+    </modules>
+</project>
