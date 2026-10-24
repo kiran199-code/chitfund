@@ -1,21 +1,14 @@
-# Render Blueprint for the chit fund: its own Postgres and the three Spring Boot services, all in one region so the
-# services reach the database over Render's private network.
+# Render Blueprint for the chit fund: the three Spring Boot services. It does NOT create a database: Render allows only
+# one free Postgres per account and the lending platform already uses it. Point DB_* at any PostgreSQL 14+ you own (a free
+# Neon / Supabase / Aiven database is fine, or a paid Render Postgres). Create an EMPTY database called chitfund first; the
+# services create their own schemas ("chit" and "batch") on first start. Do NOT point this at the lending database: the
+# lending batch service already owns a schema called "batch" there.
 #
 # Free-tier trade-offs (this is a try-it setup, not production):
 #  - Free web services sleep after ~15 min idle (the first request wakes them in about a minute). The batch service's
 #    nightly end of day will not fire while it sleeps: run it from the admin console (End of day > Start).
-#  - Free Postgres is deleted 30 days after creation unless upgraded. Render also allows only ONE free Postgres per
-#    account: if the lending platform's database already uses it, upgrade this one (plan: basic-256mb or higher) or point DB_*
-#    at a database from elsewhere.
+#  - Free Render Postgres is deleted after 30 days; Neon's free database is not, which is one more reason to use it here.
 #  - 512 MB RAM per service: the JVM heap is capped explicitly below.
-databases:
-  - name: chitfund-db
-    plan: free
-    region: singapore
-    databaseName: chitfund
-    user: chitfund_app
-    ipAllowList: []   # private network only
-
 services:
   # ---- chitfund-service: the chit API, ledger, business date and calendar ------------------------------------------
   - type: web
@@ -30,15 +23,15 @@ services:
       - key: PORT
         value: "10000"
       - key: DB_HOST
-        fromDatabase: { name: chitfund-db, property: host }
+        sync: false   # from your database's connection details
       - key: DB_PORT
-        fromDatabase: { name: chitfund-db, property: port }
+        sync: false   # from your database's connection details
       - key: DB_NAME
-        fromDatabase: { name: chitfund-db, property: database }
+        sync: false   # from your database's connection details
       - key: DB_USER
-        fromDatabase: { name: chitfund-db, property: user }
+        sync: false   # from your database's connection details
       - key: DB_PASSWORD
-        fromDatabase: { name: chitfund-db, property: password }
+        sync: false   # from your database's connection details
       - key: CHIT_DB_SCHEMA
         value: chit
       - key: CHIT_DB_POOL_SIZE
@@ -77,15 +70,15 @@ services:
       - key: SERVER_PORT
         value: "10000"
       - key: DB_HOST
-        fromDatabase: { name: chitfund-db, property: host }
+        sync: false   # from your database's connection details
       - key: DB_PORT
-        fromDatabase: { name: chitfund-db, property: port }
+        sync: false   # from your database's connection details
       - key: DB_NAME
-        fromDatabase: { name: chitfund-db, property: database }
+        sync: false   # from your database's connection details
       - key: DB_USERNAME
-        fromDatabase: { name: chitfund-db, property: user }
+        sync: false   # from your database's connection details
       - key: DB_PASSWORD
-        fromDatabase: { name: chitfund-db, property: password }
+        sync: false   # from your database's connection details
       # Quartz (clustered JDBC store), Spring Batch metadata and the running jobs each need connections.
       - key: DB_POOL_SIZE
         value: "15"

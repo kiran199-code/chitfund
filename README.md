@@ -48,8 +48,12 @@ If a job fails the date stays put; fix the cause and start end of day again: fin
 
 ## Deploy to Render
 
-**New > Blueprint** on this repository uses `render.yaml`: a Postgres and three web services. Render allows one free Postgres
-per account, so if another project already has it, upgrade this database or point `DB_*` elsewhere (see the comment in the file).
+**New > Blueprint** on this repository uses `render.yaml`: three web services and no database. Render allows one free Postgres
+per account and the lending platform already uses it, so create an empty PostgreSQL database named `chitfund` somewhere else (a free
+Neon or Supabase database works; use the direct, not the pooled, connection) and enter its details as `DB_HOST`, `DB_PORT`,
+`DB_NAME`, `DB_USER` and `DB_PASSWORD` (the batch service calls the user `DB_USERNAME`) when Render asks for the values marked
+`sync: false`. Do not share the lending database: its batch service already owns a schema called `batch` there. The services create
+their own schemas, `chit` and `batch`, on first start.
 
 1. Create the Blueprint. `chitfund-service` starts first; the other two ask for values marked `sync: false`.
 2. Copy `chitfund-service`'s public URL from the dashboard into `CHIT_SERVICE_URL` on `chitfund-batch-service` and on `chitfund-admin-service`.
