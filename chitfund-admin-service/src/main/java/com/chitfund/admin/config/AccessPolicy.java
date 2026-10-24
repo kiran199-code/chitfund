@@ -63,6 +63,17 @@ public final class AccessPolicy {
         return RULES.stream().filter(r -> r.matches(method, path)).findFirst();
     }
 
+    /**
+     * The roles a rule lets through: ADMIN plus whatever the rule names, each once. Spring Security refuses a repeated role
+     * ("duplicate element: ROLE_ADMIN"), and a rule that names ADMIN itself (to keep other roles out) would repeat it.
+     */
+    public static String[] rolesFor(Rule r) {
+        java.util.Set<String> roles = new java.util.LinkedHashSet<>();
+        roles.add(ADMIN);
+        roles.addAll(r.roles());
+        return roles.toArray(new String[0]);
+    }
+
     /** @param roles role names without the ROLE_ prefix */
     public static boolean allowed(String method, String path, Collection<String> roles) {
         if (roles.contains(ADMIN)) {

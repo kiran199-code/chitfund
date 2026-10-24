@@ -75,6 +75,6 @@ the two services come back unchanged, so a refusal ("business date mismatch", "g
 
 ## Tests
 
-48 unit tests (`mvn test`): `AccessPolicyTest` (who may call what), the controllers against fake chit and batch services
+51 unit tests (`mvn test`): `AccessPolicyTest` (who may call what), the controllers against fake chit and batch services
 (`FakeChit`, `FakeBatch`), and `MaintenanceServiceTest` (the order of the two-service clear: nothing is deleted unless the batch
 service allows it and is idle). The UI is checked with `npm run build` (`tsc --noEmit` and `vite build`).

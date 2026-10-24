@@ -46,12 +46,7 @@ public class SecurityConfig {
                         if (r.roles().isEmpty()) {
                             spec.authenticated();
                         } else {
-                            String[] roles = new String[r.roles().size() + 1];
-                            roles[0] = AccessPolicy.ADMIN;
-                            for (int i = 0; i < r.roles().size(); i++) {
-                                roles[i + 1] = r.roles().get(i);
-                            }
-                            spec.hasAnyRole(roles);
+                            spec.hasAnyRole(AccessPolicy.rolesFor(r));
                         }
                     }
                     // anything not listed (maintenance, new endpoints) is for ADMIN only
