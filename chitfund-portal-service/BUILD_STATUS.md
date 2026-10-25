@@ -126,3 +126,8 @@ Online payments, member approve/reject workflow, notifications and batch reminde
 
     /home/claude/build_portal.sh          # compile + unit tests (sandbox only)
     harness/run.sh [invite|lifecycle|mail|auth|invitee|enrol|offers]   # needs the sandbox Postgres on port 5544
+
+## Red / black / grey theme (Oct 2026)
+- Customer web app re-themed: black header and hero, red accents, grey page, white cards. Logo redrawn in red and grey; all illustrations redrawn with gradients, skyline, bunting and patterns (frontend/src/brand.tsx, styles.css, index.html).
+- Verified: typecheck, production build, screenshots (desktop and phone, mocked API). Not verified: Archivo font in a real browser (Google Fonts blocked in sandbox), real photos (none supplied; offers still take a picture link).
+- Status colours: good = black, bad/overdue = red, warning = grey outline (no green, to keep the four-colour theme).

@@ -130,7 +130,7 @@ function Landing(props: { config: PortalConfig | null; configError: string | nul
     <>
       <header className="land-top"><div className="wrap top-in"><Logo /></div></header>
       <main>
-        <div className="wrap hero">
+        <div className="hero-band"><div className="wrap hero">
           <div>
             <h1>Honest dealings.<br /><span>Happy savers.</span></h1>
             <p className="lead">
@@ -141,7 +141,7 @@ function Landing(props: { config: PortalConfig | null; configError: string | nul
             {signIn}
           </div>
           <HeroArt />
-        </div>
+        </div></div>
         {!props.invited && <PublicOffers />}
         {!props.invited && <HowItWorks />}
       </main>
