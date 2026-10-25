@@ -149,3 +149,57 @@ services:
         fromService: { type: web, name: chitfund-batch-service, envVarKey: BATCH_ADMIN_PASSWORD }
       - key: JAVA_TOOL_OPTIONS
         value: "-Xmx256m -Xss512k -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
+
+  # ---- chitfund-portal-service: customer-facing API (invitations, Google sign-in) --------------------------------------
+  # Same database as the others; it creates its own "portal" schema on first start. There is no customer web UI yet: the
+  # invite links point at PORTAL_BASE_URL/invite/<token>, which needs the portal web app (not built) to exist.
+  - type: web
+    name: chitfund-portal-service
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./chitfund-portal-service/Dockerfile
+    dockerContext: ./chitfund-portal-service
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: PORTAL_DB_POOL_SIZE
+        value: "5"
+      # Public address of chitfund-service, no trailing slash.
+      - key: CHIT_SERVICE_BASE_URL
+        sync: false
+      - key: CHIT_SERVICE_USERNAME
+        value: chit-service
+      - key: CHIT_SERVICE_PASSWORD
+        fromService: { type: web, name: chitfund-service, envVarKey: CHIT_SERVICE_PASSWORD }
+      - key: PORTAL_ADMIN_USERNAME
+        value: portal-admin
+      - key: PORTAL_ADMIN_PASSWORD
+        generateValue: true   # read it in the Render dashboard > Environment
+      # Where the customer web app will live; invite links are built from it. Allowed browser origin for the session cookie.
+      - key: PORTAL_BASE_URL
+        sync: false
+      - key: PORTAL_ALLOWED_ORIGINS
+        sync: false
+      # OAuth client id (public, not a secret). The client secret is NOT used by this service and must not be added here.
+      - key: GOOGLE_CLIENT_ID
+        value: 997986872207-87qhdke4mlt30usvaqg72n9fuq0hfboh.apps.googleusercontent.com
+      # CONSOLE logs the invite mail instead of sending it. Switch to SMTP with SMTP_HOST, SMTP_PORT, SMTP_USERNAME,
+      # SMTP_PASSWORD and PORTAL_MAIL_FROM when a mail account exists.
+      - key: PORTAL_MAIL_MODE
+        value: CONSOLE
+      - key: CHIT_TIMEZONE
+        value: Asia/Kolkata
+      - key: JAVA_TOOL_OPTIONS
+        value: "-Xmx256m -Xss512k -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
