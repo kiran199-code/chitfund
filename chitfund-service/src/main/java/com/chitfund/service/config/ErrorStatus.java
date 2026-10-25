@@ -59,6 +59,18 @@ public final class ErrorStatus {
             Map.entry("PAYMENT_NOT_REVERSIBLE", 409),
             Map.entry("DIVIDEND_MODE_MISMATCH", 409),
             Map.entry("FLOAT_REPAYMENT_TOO_LARGE", 409),
+            // recovery, write-off, transfer and exit
+            Map.entry("RECOVERY_TICKET_NOT_DEFAULTED", 409),
+            Map.entry("RECOVERY_NO_OPEN_CASE", 409),
+            Map.entry("COVER_REPAYMENT_TOO_LARGE", 409),
+            Map.entry("WRITE_OFF_PENDING", 409),
+            Map.entry("WRITE_OFF_STALE", 409),
+            Map.entry("WRITE_OFF_DEMAND_ALREADY_COVERED", 409),
+            Map.entry("SECURITY_STILL_HELD", 409),
+            Map.entry("TRANSFER_PENDING", 409),
+            Map.entry("TRANSFER_PAYOUT_PENDING", 409),
+            Map.entry("TRANSFER_TICKET_NOT_ELIGIBLE", 409),
+            Map.entry("EXIT_PRIZED_TICKET", 409),
             // the business date could not be read: nothing was changed, try again
             Map.entry("BUSINESS_DATE_UNAVAILABLE", 503),
             // internal consistency: these should never come from user input

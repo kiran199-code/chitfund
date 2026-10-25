@@ -62,6 +62,45 @@ public class InternalPayments {
     }
 
     /**
+     * Phase 6: the held deposit of a defaulted ticket is applied to what it owes the pool. Like a dividend credit it is a payment on
+     * channel INTERNAL, set against the overdue demands in the group's allocation order, so demands and statements stay one
+     * mechanism. The cash moves from the deposit account to the pool (journal SECURITY_APPLIED). {@code amount} must be exactly what
+     * the allocation can place on the overdue demands; the caller works that out first with the same pure engine.
+     *
+     * @return the receipt reference of the INTERNAL payment
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public String applySecurity(long groupId, long ticketId, long actionId, BigDecimal amount, List<DemandRow> overdue, List<AllocationBucket> order,
+                                LocalDate today, String actor) {
+        List<DemandDue> dues = overdue.stream().map(d -> new DemandDue(d.id(), d.cycleNo(), d.figures().subscriptionOutstanding(),
+                d.figures().lateFeeOutstanding())).toList();
+        AllocationEngine.Result alloc = AllocationEngine.allocate(amount, collection.latestStartedCycleNo(groupId), dues, order);
+        if (Money.scale(alloc.allocated()).compareTo(amount) != 0 || alloc.advance().signum() != 0) {
+            throw new ChitException("DATA_CONFLICT", "The deposit amount " + amount.toPlainString() + " cannot be placed exactly on the overdue demands ("
+                    + Money.scale(alloc.allocated()).toPlainString() + " fits); try again");
+        }
+        long id = collection.nextPaymentId();
+        String ref = "RCPT-" + id;
+        collection.insertPayment(id, ref, groupId, ticketId, amount, CHANNEL, today, "SECAPPLY:" + actionId, "SECURITY APPLIED", actor);
+        Map<Long, DemandFigures> changed = new LinkedHashMap<>();
+        Map<Long, DemandRow> rows = new LinkedHashMap<>();
+        overdue.forEach(d -> rows.put(d.id(), d));
+        for (Line line : alloc.lines()) {
+            collection.insertAllocation(id, line.demandId(), line.bucket(), line.amount(), false);
+            if (line.demandId() == null) {
+                continue;
+            }
+            DemandFigures f = changed.getOrDefault(line.demandId(), rows.get(line.demandId()).figures());
+            f = line.bucket() == AllocationBucket.LATE_FEES ? f.payLateFee(line.amount()) : f.paySubscription(line.amount());
+            changed.put(line.demandId(), f);
+        }
+        changed.forEach(collection::saveFigures);
+        ledger.post(JournalTemplates.securityApplied("SECAPPLY:" + actionId, ticketId, amount),
+                new PostingContext(groupId, today, null, "RECOVERY", ref, actor));
+        return ref;
+    }
+
+    /**
      * CREDIT_SUBSCRIBER_BALANCE: the dividend is set against what the ticket owes now, in the group's allocation order, and any
      * remainder is held as advance for the next instalments. Returns the amount that went to open dues; the rest is advance.
      */

@@ -81,6 +81,12 @@ public class EnrolmentRepository {
         jdbc.update("UPDATE chit_ticket SET status = ?, version = version + 1, updated_by = ? WHERE id = ?", status.name(), actor, ticketId);
     }
 
+    /** A transfer or replacement: the ticket record stays, the holder (and the payout account, which is the new holder's) change. */
+    public void reassignTicket(long ticketId, long customerId, String payoutAccountRef, String actor) {
+        jdbc.update("UPDATE chit_ticket SET customer_id = ?, payout_account_ref = ?, version = version + 1, updated_by = ? WHERE id = ?",
+                customerId, payoutAccountRef, actor, ticketId);
+    }
+
     public void exitTicket(long ticketId, String reason, LocalDate on, String actor) {
         jdbc.update("UPDATE chit_ticket SET status = 'EXITED', exit_reason = ?, exited_on = ?, version = version + 1, updated_by = ? WHERE id = ?",
                 reason, Date.valueOf(on), actor, ticketId);
@@ -151,6 +157,11 @@ public class EnrolmentRepository {
 
     public void verifySecurity(long securityId, String actor) {
         jdbc.update("UPDATE chit_security SET status = 'VERIFIED', verified_by = ?, verified_at = now() WHERE id = ?", actor, securityId);
+    }
+
+    /** The held deposit has been used up against a defaulter's arrears or the foreman's covers. */
+    public void markSecurityApplied(long securityId) {
+        jdbc.update("UPDATE chit_security SET status = 'APPLIED' WHERE id = ?", securityId);
     }
 
     public void markSecurityReturned(long securityId, LocalDate on) {

@@ -61,7 +61,8 @@ public record ChitRules(
         ForemanGuaranteeMode foremanGuaranteeMode,
         List<AllocationBucket> allocationOrder,
         Boolean defaulterLosesDividend,
-        BigDecimal securityDepositPct) {
+        BigDecimal securityDepositPct,
+        BigDecimal transferFee) {
 
     public static Builder builder() {
         return new Builder();
@@ -104,6 +105,7 @@ public record ChitRules(
         b.allocationOrder = allocationOrder;
         b.defaulterLosesDividend = defaulterLosesDividend;
         b.securityDepositPct = securityDepositPct;
+        b.transferFee = transferFee;
         return b;
     }
 
@@ -143,6 +145,7 @@ public record ChitRules(
         private List<AllocationBucket> allocationOrder = List.of(AllocationBucket.LATE_FEES, AllocationBucket.ARREARS, AllocationBucket.CURRENT);
         private Boolean defaulterLosesDividend = Boolean.TRUE;
         private BigDecimal securityDepositPct = Money.ZERO;
+        private BigDecimal transferFee = Money.ZERO;
 
         public Builder chitValue(BigDecimal v) {
             this.chitValue = v;
@@ -314,6 +317,12 @@ public record ChitRules(
             return this;
         }
 
+        /** Fee charged to the incoming holder when a ticket is transferred (a replacement exit has none). Default 0. */
+        public Builder transferFee(BigDecimal v) {
+            this.transferFee = v;
+            return this;
+        }
+
         public ChitRules build() {
             return new ChitRules(
                     chitValue,
@@ -349,7 +358,8 @@ public record ChitRules(
                     foremanGuaranteeMode,
                     allocationOrder,
                     defaulterLosesDividend,
-                    securityDepositPct);
+                    securityDepositPct,
+                    transferFee);
         }
     }
 }

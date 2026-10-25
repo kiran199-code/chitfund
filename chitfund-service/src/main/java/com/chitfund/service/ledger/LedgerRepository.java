@@ -131,6 +131,16 @@ public class LedgerRepository {
                 }, groupId);
     }
 
+    /** The balance of one account on its normal side (what a liability holds, what an asset is owed); zero if it has no postings yet. */
+    public BigDecimal balanceOf(long groupId, AccountRef ref) {
+        List<BigDecimal> rows = jdbc.query(
+                "SELECT COALESCE(SUM(CASE WHEN l.side = a.normal_side THEN l.amount ELSE -l.amount END), 0) AS bal "
+                        + "FROM ledger_account a JOIN ledger_line l ON l.account_id = a.id "
+                        + "WHERE a.group_id = ? AND a.account_type = ? AND a.ticket_id IS NOT DISTINCT FROM ?::bigint",
+                (rs, i) -> rs.getBigDecimal("bal"), groupId, ref.type().name(), ref.ticketId());
+        return rows.isEmpty() ? BigDecimal.ZERO : rows.get(0);
+    }
+
     private JournalView withLines(JournalView h) {
         List<LineView> lines = jdbc.query(
                 "SELECT l.line_no, a.account_type, a.ticket_id, l.side, l.amount FROM ledger_line l "

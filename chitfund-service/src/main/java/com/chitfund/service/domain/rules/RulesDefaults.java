@@ -44,7 +44,8 @@ public final class RulesDefaults {
                 or(r.foremanGuaranteeMode(), D.foremanGuaranteeMode()),
                 or(r.allocationOrder(), D.allocationOrder()),
                 or(r.defaulterLosesDividend(), D.defaulterLosesDividend()),
-                or(r.securityDepositPct(), D.securityDepositPct()));
+                or(r.securityDepositPct(), D.securityDepositPct()),
+                or(r.transferFee(), D.transferFee()));
     }
 
     /** The prompt's default: subscription is the chit value divided by the number of tickets, when that divides exactly. */

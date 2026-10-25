@@ -182,6 +182,28 @@ public final class JournalTemplates {
                 .credit(of(SUBSCRIBER_RECEIVABLE, ticketId), amount).build();
     }
 
+    /**
+     * The held deposit is paid to the foreman against what the ticket owes on his covers. The cash moves from the deposit
+     * account to the foreman. Dr SECURITY_DEPOSIT_LIABILITY[t] and FOREMAN_CASH / Cr FOREMAN_GUARANTEE_RECEIVABLE[t] and SECURITY_CASH.
+     */
+    public static JournalDraft securityAppliedToGuarantee(String key, long ticketId, BigDecimal amount) {
+        return JournalDraft.builder("SECURITY_APPLIED_GUARANTEE", key).narration("Deposit applied to the foreman's cover")
+                .debit(of(SECURITY_DEPOSIT_LIABILITY, ticketId), amount)
+                .debit(of(FOREMAN_CASH), amount)
+                .credit(of(FOREMAN_GUARANTEE_RECEIVABLE, ticketId), amount)
+                .credit(of(SECURITY_CASH), amount).build();
+    }
+
+    /**
+     * A late fee the foreman gives up when a defaulter's arrears are written off. The fee was the foreman's income (booked
+     * when it was charged), so he takes the loss. Dr LATE_FEE_INCOME / Cr SUBSCRIBER_RECEIVABLE[t].
+     */
+    public static JournalDraft lateFeeWaived(String key, long ticketId, BigDecimal amount) {
+        return JournalDraft.builder("LATE_FEE_WAIVED", key).narration("Late fee written off")
+                .debit(of(LATE_FEE_INCOME), amount)
+                .credit(of(SUBSCRIBER_RECEIVABLE, ticketId), amount).build();
+    }
+
     /** The ticket repays what the foreman guaranteed. Dr FOREMAN_CASH / Cr FOREMAN_GUARANTEE_RECEIVABLE[t]. */
     public static JournalDraft guaranteeRepaid(String key, long ticketId, BigDecimal amount) {
         return JournalDraft.builder("GUARANTEE_REPAID", key).narration("Guaranteed amount repaid to the foreman")

@@ -31,6 +31,19 @@ class ErrorStatusTest {
     }
 
     @Test
+    void phase6CodesMapToTheirStatus() {
+        for (String code : new String[]{"RECOVERY_TICKET_NOT_DEFAULTED", "RECOVERY_NO_OPEN_CASE", "COVER_REPAYMENT_TOO_LARGE", "WRITE_OFF_PENDING",
+                "WRITE_OFF_STALE", "WRITE_OFF_DEMAND_ALREADY_COVERED", "SECURITY_STILL_HELD", "TRANSFER_PENDING", "TRANSFER_PAYOUT_PENDING",
+                "TRANSFER_TICKET_NOT_ELIGIBLE", "EXIT_PRIZED_TICKET"}) {
+            assertEquals(409, ErrorStatus.of(code), code);
+        }
+        for (String code : new String[]{"NO_SECURITY_HELD", "NOTHING_TO_RECOVER", "NOTHING_TO_WRITE_OFF", "WRITE_OFF_NOT_PERMITTED",
+                "TRANSFER_ARREARS_EXIST", "TRANSFER_SAME_CUSTOMER", "TRANSFER_GUARANTOR_CONFLICT"}) {
+            assertEquals(422, ErrorStatus.of(code), code);
+        }
+    }
+
+    @Test
     void businessRuleRefusalsAreUnprocessable() {
         assertEquals(422, ErrorStatus.of("CONFIG_INVALID"));
         assertEquals(422, ErrorStatus.of("PAYMENT_EXCEEDS_OBLIGATION"));

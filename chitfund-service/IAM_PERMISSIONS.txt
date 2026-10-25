@@ -30,3 +30,10 @@ chit.payout.disburse|Pay out an approved prize, in one or more legs|HIGH
 chit.payout.float|Repay the foreman's float from the pool|HIGH
 chit.dividend.read|Read the dividends declared for a group or a ticket|LOW
 chit.dividend.pay|Pay out a cycle's dividends in cash (groups whose dividend mode is PAY_OUT)|HIGH
+chit.transfer.read|Read transfers and replacement exits of a group or a ticket|LOW
+chit.transfer.request|Request a transfer of a ticket to another customer, or the exit of a non-prized member through a replacement (maker)|HIGH
+chit.transfer.approve|Approve or reject a transfer or exit (checker; must differ from the requester while CHIT_MAKER_CHECKER_ENFORCE is true); changes the holder and posts the fee|HIGH
+chit.recovery.read|Read a defaulted ticket's recovery position (overdue, foreman covers owed, deposit held, steps taken) and the write-offs of a group|LOW
+chit.recovery.apply|Apply a defaulter's held deposit to arrears and the foreman's covers, and record money the holder repays to the foreman|HIGH
+chit.writeoff.request|Request a write-off of what a defaulted ticket still owes (maker); the foreman bears the loss|HIGH
+chit.writeoff.approve|Approve or reject a write-off (checker; must differ from the requester while CHIT_MAKER_CHECKER_ENFORCE is true)|HIGH

@@ -145,6 +145,9 @@ public final class RulesValidator {
         if (r.registrationFee().signum() < 0) {
             out.add(v("FEE_NEGATIVE", "registrationFee", "A fee cannot be negative"));
         }
+        if (r.transferFee() != null && r.transferFee().signum() < 0) {
+            out.add(v("FEE_NEGATIVE", "transferFee", "A fee cannot be negative"));
+        }
 
         // security deposit: a percentage of the chit value, needed only for the deposit-based rules
         BigDecimal dep = r.securityDepositPct();
