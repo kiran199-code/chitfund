@@ -65,6 +65,11 @@ export interface Invitation {
   group?: GroupInfo;
   groupUnavailable: boolean;
   canDecline: boolean;
+  canAccept: boolean;
+  ticketsEnrolled: number;
+  ticketNos?: number[];
+  customerId?: number;
+  cashDuePerTicket?: number;
 }
 
 export interface PortalConfig {
@@ -77,5 +82,6 @@ export const api = {
   signIn: (idToken: string) => call<Member>('POST', '/auth/google', { idToken }),
   signOut: () => call<void>('POST', '/auth/logout'),
   invitation: (token: string) => call<Invitation>('GET', `/invitations/${encodeURIComponent(token)}`),
+  accept: (token: string) => call<Invitation>('POST', `/invitations/${encodeURIComponent(token)}/accept`, {}),
   decline: (token: string) => call<Invitation>('POST', `/invitations/${encodeURIComponent(token)}/decline`, {}),
 };

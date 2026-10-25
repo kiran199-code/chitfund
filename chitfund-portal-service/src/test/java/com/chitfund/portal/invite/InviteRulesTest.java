@@ -20,10 +20,10 @@ class InviteRulesTest {
 
     @Test
     void aPendingInviteCanBeAcceptedDeclinedExpiredOrRevoked() {
-        for (InviteStatus to : new InviteStatus[]{ACCEPTED_AWAITING_PAYMENT, DECLINED, EXPIRED, REVOKED}) {
+        for (InviteStatus to : new InviteStatus[]{ACCEPTED_AWAITING_PAYMENT, ACCEPTED, DECLINED, EXPIRED, REVOKED}) {
             assertTrue(InviteLifecycle.allowed(PENDING, to), "PENDING to " + to);
         }
-        assertFalse(InviteLifecycle.allowed(PENDING, ACCEPTED), "payment must come first");
+        assertTrue(InviteLifecycle.allowed(PENDING, ACCEPTED), "nothing due: enrolled at acceptance");
     }
 
     @Test

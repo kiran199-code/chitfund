@@ -14,7 +14,7 @@ public final class ResetTables {
             "chit_demand", "chit_payment", "chit_payment_allocation", "chit_late_fee",
             "chit_auction", "chit_bid", "chit_draw_record",
             "chit_prize_payout", "chit_payout_leg", "chit_foreman_cover", "chit_dividend", "chit_security", "chit_default_case", "chit_recovery_action", "chit_write_off", "chit_ticket_transfer",
-            "chit_closure_report",
+            "chit_closure_report", "chit_customer",
             "ledger_account", "ledger_journal", "ledger_line",
             "idempotency_key", "chit_event", "audit_log");
 

@@ -3,6 +3,8 @@ package harness;
 import com.chitfund.service.auction.*;
 import com.chitfund.service.calendar.WorkingDayCalendar;
 import com.chitfund.service.collection.*;
+import com.chitfund.service.customer.*;
+import com.chitfund.service.customer.CustomerDtos.*;
 import com.chitfund.service.collection.CollectionDtos.*;
 import com.chitfund.service.common.Audit;
 import com.chitfund.service.common.ChitException;
@@ -30,6 +32,7 @@ public class Phase6Harness {
 
     static PgJdbcTemplate jdbc;
     static GroupService groupSvc;
+    static CustomerService customerSvc;
     static EnrolmentService enrolSvc;
     static ActivationService activation;
     static DemandWriter demands;
@@ -85,6 +88,7 @@ public class Phase6Harness {
         GroupRepository groupRepo = new GroupRepository(jdbc);
         EnrolmentRepository enrolRepo = new EnrolmentRepository(jdbc);
         groupSvc = new GroupService(groupRepo, enrolRepo, idem, audit);
+        customerSvc = new CustomerService(new CustomerRepository(jdbc), audit);
         ledgerRepo = new LedgerRepository(jdbc);
         LedgerService ledger = new LedgerService(ledgerRepo);
         enrolSvc = new EnrolmentService(groupSvc, groupRepo, enrolRepo, ledger, idem, audit, settings);
@@ -187,6 +191,7 @@ public class Phase6Harness {
         if (only.isEmpty() || only.equals("recovery")) Scenarios.recovery();
         if (only.isEmpty() || only.equals("prize")) Scenarios.prize();
         if (only.isEmpty() || only.equals("sample")) sampleGroups();
+        if (only.isEmpty() || only.equals("customer")) customers();
         System.out.println("\n" + passed + " passed, " + failed + " failed (" + jdbc.statements + " statements)");
         jdbc.close();
         System.exit(failed == 0 ? 0 : 1);
@@ -243,5 +248,60 @@ public class Phase6Harness {
         refused("chit value that does not divide", "VALIDATION_FAILED", () -> m.createSampleGroups(new com.chitfund.service.maintenance.MaintenanceDtos.SampleGroupsRequest(1, d("10000"), 3, start), "admin"));
         eq("refusals created nothing", before, jdbc.queryForObject("SELECT count(*) FROM chit_group", Long.class));
         check("audit rows written for the sample groups", jdbc.queryForObject("SELECT count(*) FROM audit_log WHERE entity_ref LIKE 'SAMPLE-%' AND action='CREATED'", Long.class) >= 5);
+    }
+
+    static void customers() {
+        System.out.println("== customers: e-mail is the key, ids are internal");
+        // legacy customers: bare numbers on tickets (1001..1005 after startGroup), with no e-mail yet
+        startGroup("H-CUST", ForemanGuaranteeMode.COVER_PAYOUT_FOREMAN_BEARS_LOSS, "0.00");
+        var a = tx(() -> customerSvc.resolve(new ResolveRequest("Asha.Rao@Example.com ", "Asha", null), "svc"));
+        check("a new e-mail makes a new customer", a.created() && !a.linkedExisting());
+        check("the new id is above every id in use", a.customerId() > 1005);
+        eq("e-mail stored canonical", "asha.rao@example.com", a.email());
+        var a2 = tx(() -> customerSvc.resolve(new ResolveRequest("asha.rao@example.com", null, null), "svc"));
+        eq("the same e-mail finds the same customer", a.customerId(), a2.customerId());
+        eq("and does not create again", false, a2.created());
+        eq("the name given first is kept", "Asha", a2.name());
+
+        var g1 = tx(() -> customerSvc.resolve(new ResolveRequest("k.i.r.a.n+x@gmail.com", "Kiran", null), "svc"));
+        var g2 = tx(() -> customerSvc.resolve(new ResolveRequest("kiran@googlemail.com", null, null), "svc"));
+        eq("Gmail dots, +tags and googlemail are one customer", g1.customerId(), g2.customerId());
+        eq("stored as the canonical Gmail address", "kiran@gmail.com", g1.email());
+
+        // an existing customer id with no e-mail gets the e-mail attached
+        var l = tx(() -> customerSvc.resolve(new ResolveRequest("old.customer@example.com", "Old", 1003L), "svc"));
+        eq("existing id kept", 1003L, l.customerId());
+        check("linked, not created", l.linkedExisting() && !l.created());
+        var l2 = tx(() -> customerSvc.resolve(new ResolveRequest("old.customer@example.com", null, null), "svc"));
+        eq("later lookup by e-mail gives the old id", 1003L, l2.customerId());
+        var l3 = tx(() -> customerSvc.resolve(new ResolveRequest("old.customer@example.com", null, 1003L), "svc"));
+        eq("repeating the link is harmless", 1003L, l3.customerId());
+
+        refused("same e-mail, a different existing id", "EMAIL_CUSTOMER_MISMATCH",
+                () -> customerSvc.resolve(new ResolveRequest("old.customer@example.com", null, 1004L), "svc"));
+        refused("an id that already has another e-mail", "CUSTOMER_EMAIL_TAKEN",
+                () -> customerSvc.resolve(new ResolveRequest("someone.else@example.com", null, 1003L), "svc"));
+        refused("an id nothing uses", "CUSTOMER_UNKNOWN",
+                () -> customerSvc.resolve(new ResolveRequest("ghost@example.com", null, 987654L), "svc"));
+        refused("a bad e-mail", "VALIDATION_FAILED", () -> customerSvc.resolve(new ResolveRequest("nope", null, null), "svc"));
+        refused("no body", "VALIDATION_FAILED", () -> customerSvc.resolve(null, "svc"));
+        eq("refusals made no customers", 3L, jdbc.queryForObject("SELECT count(*) FROM chit_customer", Long.class));
+
+        // an id typed in by hand above the sequence is never handed out
+        long next = jdbc.queryForObject("SELECT last_value + 1 FROM chit_customer_id_seq", Long.class);
+        var b = tx(() -> customerSvc.resolve(new ResolveRequest("b@example.com", null, null), "svc"));
+        check("allocation moved on", b.customerId() >= next);
+        long clash = b.customerId() + 1;
+        jdbc.inTx(() -> jdbc.update("UPDATE chit_ticket SET customer_id = ? WHERE group_id = (SELECT id FROM chit_group WHERE group_code='H-CUST') AND ticket_no = 5", clash));
+        var c = tx(() -> customerSvc.resolve(new ResolveRequest("c@example.com", null, null), "svc"));
+        check("a customer id that a ticket already uses is skipped", c.customerId() != clash && c.customerId() > clash);
+
+        var look = customerSvc.lookup(java.util.List.of("ASHA.RAO@example.com", "unknown@example.com", "nope", "Kiran@gmail.com"));
+        eq("lookup finds the known ones, canonical keys", java.util.Set.of("asha.rao@example.com", "kiran@gmail.com"), look.customerIds().keySet());
+        eq("lookup id", a.customerId(), look.customerIds().get("asha.rao@example.com"));
+        eq("get by id", "asha.rao@example.com", customerSvc.get(a.customerId()).email());
+        refused("get an unknown id", "NOT_FOUND", () -> customerSvc.get(5L));
+        check("audit rows written", jdbc.queryForObject("SELECT count(*) FROM audit_log WHERE entity_type='CUSTOMER'", Long.class) >= 5);
+        check("events written", jdbc.queryForObject("SELECT count(*) FROM chit_event WHERE event_type IN ('CustomerCreated','CustomerEmailLinked')", Long.class) >= 5);
     }
 }

@@ -1,5 +1,6 @@
 package com.chitfund.portal.invite;
 
+import com.chitfund.portal.chit.ChitEnrolmentGateway;
 import com.chitfund.portal.chit.ChitGroupGateway;
 import com.chitfund.portal.chit.GroupSummary;
 import com.chitfund.portal.common.Audit;
@@ -23,6 +24,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -41,6 +43,8 @@ public class InvitationService {
 
     private final InvitationRepository repo;
     private final ChitGroupGateway groups;
+    private final ChitEnrolmentGateway customers;
+    private final EnrolmentFlow enrolment;
     private final OutboxService outbox;
     private final IdempotencyStore idempotency;
     private final Audit audit;
@@ -52,7 +56,7 @@ public class InvitationService {
     private final int maxTickets;
     private final ZoneId zone;
 
-    public InvitationService(InvitationRepository repo, ChitGroupGateway groups, OutboxService outbox, IdempotencyStore idempotency, Audit audit,
+    public InvitationService(InvitationRepository repo, ChitGroupGateway groups, ChitEnrolmentGateway customers, EnrolmentFlow enrolment, OutboxService outbox, IdempotencyStore idempotency, Audit audit,
                              ObjectMapper mapper,
                              @Value("${chit.portal.base-url}") String portalBaseUrl,
                              @Value("${chit.portal.invite.lifetime-days:7}") int lifetimeDays,
@@ -61,6 +65,8 @@ public class InvitationService {
                              @Value("${chit.portal.timezone:Asia/Kolkata}") String timezone) {
         this.repo = repo;
         this.groups = groups;
+        this.customers = customers;
+        this.enrolment = enrolment;
         this.outbox = outbox;
         this.idempotency = idempotency;
         this.audit = audit;
@@ -89,7 +95,7 @@ public class InvitationService {
         }
         StringBuilder fp = new StringBuilder(code).append('|').append(days);
         for (Invitee i : req.invitees()) {
-            fp.append('|').append(i == null ? "" : i.email() + "," + i.name() + "," + i.tickets());
+            fp.append('|').append(i == null ? "" : i.email() + "," + i.name() + "," + i.tickets() + "," + i.existingCustomerId());
         }
         Replay replay = idempotency.begin(idemKey, OP_BATCH, Hashing.sha256(fp.toString()));
         if (replay != null) {
@@ -101,6 +107,7 @@ public class InvitationService {
         List<InviteView> created = new ArrayList<>();
         List<Skipped> skipped = new ArrayList<>();
         Set<String> seen = new HashSet<>();
+        Map<String, Long> known = knownCustomers(req.invitees());
 
         for (Invitee in : req.invitees()) {
             String raw = in == null ? null : in.email();
@@ -123,6 +130,16 @@ public class InvitationService {
                 skipped.add(new Skipped(email, "INVALID_NAME", "Name is longer than 120 characters"));
                 continue;
             }
+            Long existingId = in.existingCustomerId();
+            if (existingId != null && existingId <= 0) {
+                skipped.add(new Skipped(email, "INVALID_CUSTOMER_ID", "existingCustomerId must be a positive number"));
+                continue;
+            }
+            Long knownId = known.get(email);
+            if (existingId != null && knownId != null && !existingId.equals(knownId)) {
+                skipped.add(new Skipped(email, "EMAIL_CUSTOMER_MISMATCH", "This e-mail already belongs to customer " + knownId + ", not " + existingId));
+                continue;
+            }
             InviteRow live = repo.liveForUpdate(code, email).orElse(null);
             if (live != null) {
                 InviteStatus eff = InviteLifecycle.effective(live.status(), live.expiresAt(), now);
@@ -137,9 +154,9 @@ public class InvitationService {
                 }
             }
             String token = InviteTokens.generate(random);
-            long id = repo.insert(g.groupCode(), g.name(), email, name, tickets, InviteTokens.hash(token), expires, actor);
+            long id = repo.insert(g.groupCode(), g.name(), email, name, tickets, InviteTokens.hash(token), expires, actor, existingId, knownId);
             queueMail(id, 1, token, g, email, name, tickets, expires, now);
-            audit.log("INVITATION", g.groupCode() + "#" + id, "INVITED", actor, sourceIp, email + ", tickets " + tickets);
+            audit.log("INVITATION", g.groupCode() + "#" + id, "INVITED", actor, sourceIp, email + ", tickets " + tickets + (knownId != null ? ", customer " + knownId : ""));
             created.add(view(repo.byId(id).orElseThrow(), now));
         }
         BatchResult result = new BatchResult(g.groupCode(), created, skipped, g.seatsLeft(), repo.countPending(code, now), false);
@@ -213,6 +230,39 @@ public class InvitationService {
         return view(repo.byId(id).orElseThrow(), now);
     }
 
+    // ---- admin: record the receipt and enrol -----------------------------------------------------------------------------
+
+    /** The seat is taken only here for an invitation that waited for payment. Refusals keep what was already done (see EnrolmentFlow). */
+    @Transactional(noRollbackFor = PortalException.class)
+    public InviteView enrol(String code, long id, EnrolRequest req, String actor, String sourceIp, OffsetDateTime now) {
+        InviteRow row = repo.byIdForUpdate(code, id).orElseThrow(() -> PortalException.notFound("Invitation", String.valueOf(id)));
+        InviteStatus eff = InviteLifecycle.effective(row.status(), row.expiresAt(), now);
+        if (eff == InviteStatus.EXPIRED || eff == InviteStatus.REVOKED || eff == InviteStatus.DECLINED || eff == InviteStatus.PENDING) {
+            throw PortalException.conflict("INVITE_NOT_AWAITING_PAYMENT", "An invitation that is " + eff + " cannot be enrolled");
+        }
+        enrolment.adminEnrol(row, req, actor, sourceIp, now);
+        return view(repo.byId(id).orElseThrow(), now);
+    }
+
+    /** Customers that already exist for these addresses. Best effort: the invitation does not depend on it, accept resolves the customer anyway. */
+    private Map<String, Long> knownCustomers(List<Invitee> invitees) {
+        List<String> emails = new ArrayList<>();
+        for (Invitee i : invitees) {
+            String e = i == null ? null : Emails.normalise(i.email());
+            if (e != null) {
+                emails.add(e);
+            }
+        }
+        if (emails.isEmpty()) {
+            return Map.of();
+        }
+        try {
+            return customers.lookupCustomers(emails);
+        } catch (PortalException e) {
+            return Map.of();
+        }
+    }
+
     // ---- expiry sweep ------------------------------------------------------------------------------------------------
 
     /** Writes EXPIRED on invitations past their expiry. Reads already treat them as expired; this keeps the stored status honest. */
@@ -249,7 +299,8 @@ public class InvitationService {
         // "SEND_FAILED" is what the admin should see when the mail gave up; a mail still waiting or retrying is PENDING
         String mail = r.mailStatus() == null ? null : ("FAILED".equals(r.mailStatus()) ? "SEND_FAILED" : r.mailStatus());
         return new InviteView(r.id(), r.groupCode(), r.groupName(), r.email(), r.inviteeName(), r.ticketsOffered(), eff.name(), r.expiresAt(), r.sentAt(),
-                r.firstOpenedAt(), r.acceptedAt(), r.declinedAt(), r.revokedAt(), r.revokeReason(), mail, r.mailAttempts(), r.createdBy(), r.createdAt());
+                r.firstOpenedAt(), r.acceptedAt(), r.declinedAt(), r.revokedAt(), r.revokeReason(), mail, r.mailAttempts(), r.createdBy(), r.createdAt(),
+                r.customerId(), r.existingCustomerId(), r.ticketsEnrolled());
     }
 
     private String store(BatchResult r) {

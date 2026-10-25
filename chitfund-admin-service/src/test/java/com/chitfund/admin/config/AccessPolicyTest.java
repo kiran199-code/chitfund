@@ -116,4 +116,14 @@ class AccessPolicyTest {
         assertThrows(IllegalStateException.class, () -> AdminUsers.build("admin", "pw", "admin", "1", "b", ""));
         assertThrows(IllegalStateException.class, () -> AdminUsers.build("admin", "pw", " ", "1", "b", ""));
     }
+
+    @Test
+    void invitationsAreForChitUsersAndAdminOnly() {
+        for (String[] call : new String[][]{{"GET", "/api/admin/portal/groups/G1/invitations"}, {"POST", "/api/admin/portal/groups/G1/invitations"},
+                {"POST", "/api/admin/portal/groups/G1/invitations/4/enrol"}, {"GET", "/api/admin/portal/status"}}) {
+            assertTrue(AccessPolicy.allowed(call[0], call[1], List.of("CHIT_OPS")), "chit ops " + call[1]);
+            assertTrue(AccessPolicy.allowed(call[0], call[1], List.of("ADMIN")), "admin " + call[1]);
+            assertFalse(AccessPolicy.allowed(call[0], call[1], List.of("BATCH_OPS")), "batch ops " + call[1]);
+        }
+    }
 }

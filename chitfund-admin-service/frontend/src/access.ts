@@ -5,6 +5,7 @@ import type { Me } from './types';
  * the menu and the buttons tidy). Everyone who signs in can read the chit data, the business date and the holiday list; ADMIN can do everything.
  *
  *  - CHIT_OPS: every change to chit data (create and activate groups, enrol, record and reverse payments, holidays) and the daily "run now" buttons.
+ *    CHIT_OPS also owns invitations by e-mail.
  *  - BATCH_OPS: batch jobs, end of day, and the daily "run now" buttons.
  *  - ADMIN only: setting the business date by hand, and Maintenance.
  */

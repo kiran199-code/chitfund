@@ -67,11 +67,29 @@ exception. `signIn`, `view` and `decline` now use `@Transactional(noRollbackFor 
 - Plain-text mail only. Group rules shown to the invitee are the summary only (spec P-5 full rules still to do). Revoke takes no idempotency key.
 - Seats are not reserved by an invitation (decision D1).
 
+## Step 3: accept and enrol (invite many people by e-mail)
+
+- The e-mail is the customer's key; the customer id is internal. chitfund-service keeps the customer master (`chit_customer`, V8; `/api/v1/chit/customers/resolve|lookup|{id}`).
+  Inviting looks up existing customers by e-mail (best effort) and stores the id on the invitation. An admin may also give an old customer id with the e-mail:
+  on accept the e-mail is attached to that id (refused if the id already has another e-mail).
+- Member accepts (`POST /api/v1/portal/invitations/{token}/accept`): the e-mail becomes a customer (existing, linked or new). If the group's enrolment quote asks
+  for nothing (no cash, no lien, no guarantor) the tickets are enrolled at once and the invitation is ACCEPTED. Otherwise it goes to ACCEPTED_AWAITING_PAYMENT and
+  the admin records the receipt: `POST /api/v1/portal/admin/groups/{code}/invitations/{id}/enrol` ("Record fees and enrol" in the console), until Step 4 payments.
+- Each ticket has its own idempotency key `PORTAL-ENROL:<invitation>:<seq>`, so a retry after a crash or lost reply never makes a second ticket. The first ticket decides
+  success; later tickets of a multi-ticket invitation are best effort and the admin can top up ("Enrol the rest").
+- V2 also fixes V1: `status` was VARCHAR(24) but `ACCEPTED_AWAITING_PAYMENT` is 25 characters, so that status could never be stored (found by the harness).
+- Admin console: "Invite by e-mail" panel on a group open for enrolment (one person per line: e-mail, name, tickets, old customer id) with the invitation list, resend,
+  withdraw and enrol; the manual Enrol dialog now takes the customer e-mail first and fills in or creates the customer id.
+- Verified here: 55 portal unit tests, 177 portal harness checks against PostgreSQL 16 (with a fake chitfund-service), 37 schema checks, chitfund-service 273 unit tests and 26 customer
+  harness checks, both frontends typecheck. NOT verified: the admin Java (PortalClient, PortalInviteController, their test), the Spring wiring, the real HTTP calls between services,
+  and the screens in a browser. A `Invitee` record with two constructors must deserialise through Jackson's canonical constructor: confirm with a real request.
+- Needs on Render: admin service `PORTAL_SERVICE_URL`, `PORTAL_ADMIN_PASSWORD` (same value as the portal's), `PORTAL_ADMIN_USERNAME`; portal `CHIT_SERVICE_URL` and credentials.
+
 ## Not started
 
-Step 3 accept and enrol, Step 4 payments, Step 5 bids, Step 6 real notifications and batch reminders, Step 7 React UI.
+Step 4 payments, Step 5 bids, Step 6 real notifications and batch reminders.
 
 ## Run
 
     /home/claude/build_portal.sh          # compile + unit tests (sandbox only)
-    harness/run.sh [invite|lifecycle|mail|auth|invitee]   # needs the sandbox Postgres on port 5544
+    harness/run.sh [invite|lifecycle|mail|auth|invitee|enrol]   # needs the sandbox Postgres on port 5544

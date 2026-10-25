@@ -44,6 +44,12 @@ public class InvitationAdminController {
         return service.resend(code, id, idemKey, actor, null, OffsetDateTime.now(clock));
     }
 
+    /** Records that the fees and papers for an accepted invitation are in, and enrols the tickets. */
+    @PostMapping("/{id}/enrol")
+    public InviteView enrol(@PathVariable String code, @PathVariable long id, @RequestBody EnrolRequest body, @RequestHeader("X-Actor") String actor) {
+        return service.enrol(code, id, body, actor, null, OffsetDateTime.now(clock));
+    }
+
     @PostMapping("/{id}/revoke")
     public InviteView revoke(@PathVariable String code, @PathVariable long id, @RequestBody(required = false) RevokeRequest body,
                              @RequestHeader("X-Actor") String actor) {

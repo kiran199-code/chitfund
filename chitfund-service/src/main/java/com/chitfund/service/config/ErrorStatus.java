@@ -23,6 +23,7 @@ public final class ErrorStatus {
             Map.entry("MAKER_CHECKER_VIOLATION", 403),
             // not found
             Map.entry("NOT_FOUND", 404),
+            Map.entry("CUSTOMER_UNKNOWN", 404),
             // conflict
             Map.entry("IDEMPOTENCY_KEY_REUSED", 409),
             Map.entry("POSTING_KEY_REUSED", 409),
@@ -30,6 +31,8 @@ public final class ErrorStatus {
             Map.entry("RULES_FROZEN", 409),
             Map.entry("DATA_CONFLICT", 409),
             Map.entry("GROUP_CODE_EXISTS", 409),
+            Map.entry("EMAIL_CUSTOMER_MISMATCH", 409),
+            Map.entry("CUSTOMER_EMAIL_TAKEN", 409),
             Map.entry("GROUP_FULL", 409),
             Map.entry("ENROLMENT_NOT_OPEN", 409),
             Map.entry("WITHDRAWAL_NOT_ALLOWED", 409),

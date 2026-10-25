@@ -101,6 +101,20 @@ public class PortalController {
         return invites.view(token, me, ip, now);
     }
 
+    @PostMapping("/invitations/{token}/accept")
+    public InviteView accept(@PathVariable String token, HttpServletRequest request,
+                             @CookieValue(name = SessionCookies.NAME, required = false) String session,
+                             @RequestHeader(value = "Origin", required = false) String origin,
+                             @RequestHeader(value = OriginGuard.HEADER, required = false) String client,
+                             @RequestHeader(value = "X-Forwarded-For", required = false) String forwardedFor) {
+        originGuard.check(origin, client);
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        String ip = ClientIp.resolve(request.getRemoteAddr(), forwardedFor, trustProxy);
+        inviteLimit.hit(ip);
+        SessionMember me = auth.resolve(session, now);
+        return invites.accept(token, me, ip, now);
+    }
+
     @PostMapping("/invitations/{token}/decline")
     public InviteView decline(@PathVariable String token, @RequestBody(required = false) DeclineRequest body, HttpServletRequest request,
                               @CookieValue(name = SessionCookies.NAME, required = false) String session,

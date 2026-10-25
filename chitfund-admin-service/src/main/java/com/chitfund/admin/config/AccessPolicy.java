@@ -12,6 +12,7 @@ import java.util.Optional;
  *   <li>Everyone who signs in can read: the business date, the holiday list, chit groups, tickets, cycles, dues, payments, statements.</li>
  *   <li>CHIT_OPS: every change to chit data: create and activate groups, enrol, verify security, record and reverse payments, cancel, and
  *       edit the holiday list.</li>
+ *   <li>CHIT_OPS: also invitations by e-mail (read and change).</li>
  *   <li>BATCH_OPS: end of day and the batch jobs. Also the three "run now" buttons (demand, late fee, default check), which CHIT_OPS may press too.</li>
  *   <li>ADMIN only: setting the business date by hand, and Maintenance (clear all data).</li>
  * </ul>
@@ -54,6 +55,8 @@ public final class AccessPolicy {
             // actions
             new Rule(null, A + "/chit/**", List.of(CHIT_OPS)),
             new Rule(null, A + "/calendar/**", List.of(CHIT_OPS)),
+            // invitations by e-mail (the list shows addresses, so reading is limited too)
+            new Rule(null, A + "/portal/**", List.of(CHIT_OPS)),
             new Rule(null, A + "/batch/**", List.of(BATCH_OPS)),
             new Rule(null, A + "/eod/**", List.of(BATCH_OPS)));
 

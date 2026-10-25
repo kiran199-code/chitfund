@@ -17,7 +17,8 @@ import static com.chitfund.portal.invite.InviteStatus.*;
 public final class InviteLifecycle {
 
     private static final Map<InviteStatus, Set<InviteStatus>> NEXT = Map.of(
-            PENDING, EnumSet.of(ACCEPTED_AWAITING_PAYMENT, DECLINED, EXPIRED, REVOKED),
+            // ACCEPTED straight from PENDING when nothing is due at acceptance (the tickets are enrolled in the same step)
+            PENDING, EnumSet.of(ACCEPTED, ACCEPTED_AWAITING_PAYMENT, DECLINED, EXPIRED, REVOKED),
             ACCEPTED_AWAITING_PAYMENT, EnumSet.of(ACCEPTED, EXPIRED, REVOKED),
             // a resend gives an expired invitation a new token and a new expiry
             EXPIRED, EnumSet.of(PENDING),

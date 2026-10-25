@@ -103,6 +103,27 @@ public class ChitController {
         return client.post("/groups/" + code(code, "code") + "/open-enrolment", null, actor(acting, user), key(key));
     }
 
+    // ---------------------------------------------------------------- customers (the e-mail is the key)
+
+    @Operation(summary = "Which of these e-mails are already customers (body {emails:[...]}); answers {customerIds:{email: id}}")
+    @PostMapping("/customers/lookup")
+    public JsonNode lookupCustomers(@RequestBody JsonNode body, @RequestHeader(value = "X-Acting-As", required = false) String acting, Principal user) {
+        object(body);
+        if (!body.path("emails").isArray() || body.path("emails").isEmpty()) {
+            throw new IllegalArgumentException("emails must list at least one address");
+        }
+        return client.post("/customers/lookup", body, actor(acting, user), null);
+    }
+
+    @Operation(summary = "The customer for an e-mail: the existing one, or a new customer id (body {email, name?, existingCustomerId?})",
+            description = "Safe to repeat. existingCustomerId attaches the e-mail to an old customer id that has no e-mail yet.")
+    @PostMapping("/customers/resolve")
+    public JsonNode resolveCustomer(@RequestBody JsonNode body, @RequestHeader(value = "X-Acting-As", required = false) String acting, Principal user) {
+        object(body);
+        text(body, "email");
+        return client.post("/customers/resolve", body, actor(acting, user), null);
+    }
+
     @Operation(summary = "What a new ticket owes at enrolment")
     @GetMapping("/groups/{code}/enrolment-quote")
     public JsonNode quote(@PathVariable String code) {

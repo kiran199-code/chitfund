@@ -153,6 +153,18 @@ function InvitePage({ token, member, onSignOut }: { token: string; member: Membe
     };
   }, [token]);
 
+  async function accept() {
+    setBusy(true);
+    setActionError(null);
+    try {
+      setInv(await api.accept(token));
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function decline() {
     setBusy(true);
     setActionError(null);
@@ -220,10 +232,25 @@ function InvitePage({ token, member, onSignOut }: { token: string; member: Membe
       </dl>
       {inv.groupUnavailable && <p className="muted">The group details could not be loaded right now. Reload the page in a moment.</p>}
       {actionError && <p className="error" role="alert">{actionError}</p>}
+      {inv.cashDuePerTicket !== undefined && inv.cashDuePerTicket > 0 && (inv.canAccept || inv.status === 'ACCEPTED_AWAITING_PAYMENT') && (
+        <p className="small">
+          To take your {inv.tickets === 1 ? 'ticket' : `${inv.tickets} tickets`} you will pay <strong>{rupees(inv.cashDuePerTicket)}</strong> per ticket
+          at enrolment. The organiser records your payment and then enrols you.
+        </p>
+      )}
+      {inv.status === 'ACCEPTED_AWAITING_PAYMENT' && (
+        <p>Thank you for accepting. Your seat is confirmed once the organiser has recorded your payment; you do not need to do anything else here.</p>
+      )}
+      {inv.status === 'ACCEPTED' && (
+        <p>
+          You are enrolled{inv.ticketNos && inv.ticketNos.length > 0 ? <> with {inv.ticketNos.length === 1 ? 'ticket' : 'tickets'} <strong>{inv.ticketNos.join(', ')}</strong></> : null}.
+          {inv.ticketsEnrolled < inv.tickets && <> {inv.tickets - inv.ticketsEnrolled} more of the {inv.tickets} offered will be added by the organiser.</>}
+        </p>
+      )}
       {inv.canDecline && !confirming && (
         <div className="actions">
-          <button className="btn" disabled title="Accepting will be available in the next update">Accept and join (coming soon)</button>
-          <button className="btn btn-quiet" onClick={() => setConfirming(true)}>Decline</button>
+          <button className="btn" onClick={accept} disabled={busy || !inv.canAccept}>{busy ? 'Joining...' : 'Accept and join'}</button>
+          <button className="btn btn-quiet" onClick={() => setConfirming(true)} disabled={busy}>Decline</button>
         </div>
       )}
       {inv.canDecline && confirming && (
@@ -232,9 +259,6 @@ function InvitePage({ token, member, onSignOut }: { token: string; member: Membe
           <button className="btn btn-danger" onClick={decline} disabled={busy}>{busy ? 'Declining...' : 'Yes, decline'}</button>
           <button className="btn btn-quiet" onClick={() => setConfirming(false)} disabled={busy}>Cancel</button>
         </div>
-      )}
-      {inv.canDecline && !confirming && (
-        <p className="muted small">Accepting and paying will be added in the next update. Until then you can review the group, or decline.</p>
       )}
     </section>
   );

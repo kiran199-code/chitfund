@@ -1,4 +1,4 @@
--- Behavioural check of the portal schema (V1). Run against a scratch database after Flyway has migrated it:
+-- Behavioural check of the portal schema (V1 and V2). Run against a scratch database after Flyway has migrated it:
 --   psql -v ON_ERROR_STOP=1 -d <db> -f scripts/verify_schema.sql
 -- Every "must fail" statement runs in a sub-block; if it succeeds the script stops. Everything is rolled back at the end.
 -- Do not run against a database holding real data.
@@ -44,7 +44,14 @@ SELECT pg_temp.must_fail('ACCEPTED without a member', $$UPDATE portal_invitation
 SELECT pg_temp.must_pass('REVOKED with who and when', $$UPDATE portal_invitation SET status='REVOKED', revoked_at=now(), revoked_by='adm' WHERE group_code='G2'$$);
 SELECT pg_temp.must_pass('a new live invitation once the old one is revoked', $$INSERT INTO portal_invitation(group_code,group_name,email,token_hash,expires_at,created_by)
   VALUES ('G2','g','a@x.com',repeat('f',64),now()+interval '7 days','adm')$$);
-SELECT pg_temp.must_pass('ACCEPTED with member and time', $$UPDATE portal_invitation SET status='ACCEPTED', accepted_at=now(), member_id=(SELECT id FROM portal_member WHERE email='a@x.com') WHERE group_code='G2' AND status='PENDING'$$);
+SELECT pg_temp.must_fail('ACCEPTED without an enrolled ticket or customer (V2)', $$UPDATE portal_invitation SET status='ACCEPTED', accepted_at=now(), member_id=(SELECT id FROM portal_member WHERE email='a@x.com') WHERE group_code='G2' AND status='PENDING'$$);
+SELECT pg_temp.must_fail('AWAITING_PAYMENT without a customer (V2)', $$UPDATE portal_invitation SET status='ACCEPTED_AWAITING_PAYMENT', accepted_at=now(), member_id=(SELECT id FROM portal_member WHERE email='a@x.com') WHERE group_code='G2' AND status='PENDING'$$);
+SELECT pg_temp.must_pass('AWAITING_PAYMENT with member, time and customer (the status fits its column)', $$UPDATE portal_invitation SET status='ACCEPTED_AWAITING_PAYMENT', accepted_at=now(), customer_id=5001, member_id=(SELECT id FROM portal_member WHERE email='a@x.com') WHERE group_code='G2' AND status='PENDING'$$);
+SELECT pg_temp.must_fail('more tickets enrolled than offered', $$UPDATE portal_invitation SET tickets_enrolled=2 WHERE group_code='G2' AND status='ACCEPTED_AWAITING_PAYMENT'$$);
+SELECT pg_temp.must_fail('a non-positive existing customer id', $$UPDATE portal_invitation SET existing_customer_id=0 WHERE group_code='G2' AND status='ACCEPTED_AWAITING_PAYMENT'$$);
+SELECT pg_temp.must_pass('a ticket row', $$INSERT INTO portal_invitation_ticket(invitation_id,seq,ticket_no) SELECT id,1,7 FROM portal_invitation WHERE group_code='G2' AND status='ACCEPTED_AWAITING_PAYMENT'$$);
+SELECT pg_temp.must_fail('the same seq twice', $$INSERT INTO portal_invitation_ticket(invitation_id,seq,ticket_no) SELECT id,1,8 FROM portal_invitation WHERE group_code='G2' AND status='ACCEPTED_AWAITING_PAYMENT'$$);
+SELECT pg_temp.must_pass('ACCEPTED with one ticket enrolled and a customer', $$UPDATE portal_invitation SET status='ACCEPTED', tickets_enrolled=1 WHERE group_code='G2' AND status='ACCEPTED_AWAITING_PAYMENT'$$);
 
 -- sessions, outbox, idempotency
 SELECT pg_temp.must_pass('a session', $$INSERT INTO portal_session(member_id,token_hash,expires_at) SELECT id,repeat('1',64),now()+interval '8 hours' FROM portal_member WHERE email='a@x.com'$$);

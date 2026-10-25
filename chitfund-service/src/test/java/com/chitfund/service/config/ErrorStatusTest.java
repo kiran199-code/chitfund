@@ -15,6 +15,9 @@ class ErrorStatusTest {
         assertEquals(403, ErrorStatus.of("RESET_DISABLED"));
         assertEquals(503, ErrorStatus.of("BUSINESS_DATE_UNAVAILABLE"));
         assertEquals(404, ErrorStatus.of("NOT_FOUND"));
+        assertEquals(404, ErrorStatus.of("CUSTOMER_UNKNOWN"));
+        assertEquals(409, ErrorStatus.of("EMAIL_CUSTOMER_MISMATCH"));
+        assertEquals(409, ErrorStatus.of("CUSTOMER_EMAIL_TAKEN"));
         assertEquals(409, ErrorStatus.of("IDEMPOTENCY_KEY_REUSED"));
         assertEquals(409, ErrorStatus.of("POSTING_KEY_REUSED"));
         assertEquals(409, ErrorStatus.of("ILLEGAL_TRANSITION"));

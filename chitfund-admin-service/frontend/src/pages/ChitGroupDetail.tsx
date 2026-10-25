@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { get, send } from '../api';
 import { ChitBadge, ChitGate, GroupBadge, useCanChangeChit, wholeNumber } from '../components/chit';
 import { GroupPrizesCard } from '../components/chitAuction';
+import { InvitePanel } from '../components/chitInvites';
 import { GroupCollectionCard, PaymentsTable, ReceiptModal, ReversePaymentDialog } from '../components/chitCollection';
 import DataTable, { Col } from '../components/DataTable';
 import { ActingAsBar, NoticeBanner, useActingAs } from '../components/actingAs';
@@ -11,7 +12,7 @@ import { Card, ErrorBox, KeyValues, Loading, PageHeader } from '../components/ui
 import { date, dateTime, label, money } from '../format';
 import { useLoad } from '../hooks';
 import type {
-  ChitActivation, ChitCancelResult, ChitCycle, ChitGroup, ChitPayment, ChitQuote, ChitReadiness, ChitTicket, ChitWithdrawResult,
+  ChitActivation, ChitCancelResult, ChitCustomerLookup, ChitCustomerRef, ChitCycle, ChitGroup, ChitPayment, ChitQuote, ChitReadiness, ChitTicket, ChitWithdrawResult,
 } from '../types';
 
 /** Statuses before activation: tickets can still be enrolled, withdrawn or have their security verified, and the group cancelled. */
@@ -158,6 +159,10 @@ function Body({ code }: { code: string }) {
         </Card>
       )}
 
+      {g.status === 'OPEN_FOR_ENROLMENT' && canChange && (
+        <InvitePanel code={g.groupCode} quote={quote.data} onChanged={() => setTick(t => t + 1)} />
+      )}
+
       <Card title={`Tickets (${live.length} of ${g.ticketCount})`} actions={<button className="btn" onClick={() => setTick(t => t + 1)}>Refresh</button>}>
         {tickets.loading && !tickets.data && <Loading />}
         {tickets.error && <ErrorBox message={tickets.error} onRetry={tickets.reload} />}
@@ -282,17 +287,40 @@ function QuoteLine({ q }: { q: ChitQuote }) {
 function EnrolDialog({ q, code, actor, seatsLeft, onSubmit, onClose }: {
   q: ChitQuote; code: string; actor: string; seatsLeft: number; onSubmit: (body: Record<string, unknown>) => Promise<void>; onClose: () => void;
 }) {
+  const [email, setEmail] = useState('');
   const [customer, setCustomer] = useState('');
+  const [found, setFound] = useState<string | null>(null);
   const [payout, setPayout] = useState('');
   const [guarantor, setGuarantor] = useState('');
   const [lien, setLien] = useState('');
 
+  /** The e-mail is the key: an existing customer's id fills in; otherwise a new id is made when the ticket is enrolled. */
+  async function lookup() {
+    setFound(null);
+    const e = email.trim();
+    if (!e.includes('@')) { setFound('Enter a valid e-mail address.'); return; }
+    try {
+      const r = await send<ChitCustomerLookup>('POST', '/chit/customers/lookup', { emails: [e] });
+      const hit = Object.values(r.customerIds ?? {})[0];
+      if (hit) { setCustomer(String(hit)); setFound(`Existing customer ${hit}.`); } else { setFound('Not a customer yet: a new customer id is created on enrolment.'); }
+    } catch (ex) {
+      setFound(ex instanceof Error ? ex.message : String(ex));
+    }
+  }
+
   async function confirm() {
-    if (!wholeNumber(customer)) throw new Error('Customer id must be a whole number');
+    let customerId = customer.trim();
+    if (email.trim()) {
+      if (customerId && !wholeNumber(customerId)) throw new Error('Customer id must be a whole number');
+      const r = await send<ChitCustomerRef>('POST', '/chit/customers/resolve', { email: email.trim(), ...(customerId ? { existingCustomerId: Number(customerId) } : {}) });
+      customerId = String(r.customerId);
+      setCustomer(customerId);
+    }
+    if (!wholeNumber(customerId)) throw new Error('Give the customer id, or the customer e-mail');
     if (q.guarantorRequired && !wholeNumber(guarantor)) throw new Error('A guarantor customer id is required');
     if (q.lienAmount > 0 && !lien.trim()) throw new Error('The lien reference is required');
     const body: Record<string, unknown> = {
-      customerId: Number(customer.trim()),
+      customerId: Number(customerId),
       enrolmentFeeReceived: q.enrolmentFee, registrationFeeReceived: q.registrationFee, securityDepositReceived: q.securityDeposit,
     };
     if (payout.trim()) body.payoutAccountRef = payout.trim();
@@ -306,7 +334,12 @@ function EnrolDialog({ q, code, actor, seatsLeft, onSubmit, onClose }: {
       rows={[['Next seat', `${seatsLeft} seat(s) left; the lowest free number is used`], ['Cash to collect', money(q.cashDue)], ['Acting as', actor]]}
       note={(
         <>
-          <Field label="Customer id"><input inputMode="numeric" value={customer} onChange={e => setCustomer(e.target.value)} autoFocus /></Field>
+          <Field label="Customer e-mail" hint={found ?? 'The e-mail identifies the customer. Leave the customer id empty for a new customer.'}>
+            <input type="email" value={email} onChange={e => { setEmail(e.target.value); setFound(null); }} onBlur={() => { if (email.trim()) void lookup(); }} autoFocus />
+          </Field>
+          <Field label="Customer id" hint="Filled in for an existing customer. For an old customer without an e-mail, type the id and the e-mail above: the e-mail is attached to it.">
+            <input inputMode="numeric" value={customer} onChange={e => setCustomer(e.target.value)} />
+          </Field>
           <Field label="Payout account (optional)"><input value={payout} onChange={e => setPayout(e.target.value)} maxLength={60} /></Field>
           {q.guarantorRequired && <Field label="Guarantor customer id"><input inputMode="numeric" value={guarantor} onChange={e => setGuarantor(e.target.value)} /></Field>}
           {q.lienAmount > 0 && <Field label="Lien reference"><input value={lien} onChange={e => setLien(e.target.value)} /></Field>}

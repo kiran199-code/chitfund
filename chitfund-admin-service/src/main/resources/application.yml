@@ -42,6 +42,13 @@ batch:
     username: ${BATCH_ADMIN_USERNAME:batch-admin}
     password: ${BATCH_ADMIN_PASSWORD:}
 
+# Invitations by e-mail: done through chitfund-portal-service's admin API.
+portal:
+  service:
+    base-url: ${PORTAL_SERVICE_URL:}
+    username: ${PORTAL_ADMIN_USERNAME:portal-admin}
+    password: ${PORTAL_ADMIN_PASSWORD:}
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

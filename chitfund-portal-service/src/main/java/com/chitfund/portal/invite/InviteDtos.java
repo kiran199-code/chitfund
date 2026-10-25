@@ -9,8 +9,15 @@ public final class InviteDtos {
     private InviteDtos() {
     }
 
-    /** One person to invite. {@code tickets} defaults to 1. */
-    public record Invitee(String email, String name, Integer tickets) {
+    /** One person to invite. {@code tickets} defaults to 1. {@code existingCustomerId} is optional: an old customer id to attach this e-mail to. */
+    public record Invitee(String email, String name, Integer tickets, Long existingCustomerId) {
+        public Invitee(String email, String name, Integer tickets) {
+            this(email, name, tickets, null);
+        }
+    }
+
+    /** What the admin confirms when recording that the money and papers for an accepted invitation are in. */
+    public record EnrolRequest(Boolean feesReceived, Long guarantorCustomerId, String lienReference, String payoutAccountRef) {
     }
 
     /** {@code expiryDays} (1 to 30) overrides the default lifetime for this batch. */
@@ -22,7 +29,7 @@ public final class InviteDtos {
     public record InviteView(long id, String groupCode, String groupName, String email, String inviteeName, int tickets, String status,
                              OffsetDateTime expiresAt, OffsetDateTime sentAt, OffsetDateTime firstOpenedAt, OffsetDateTime acceptedAt,
                              OffsetDateTime declinedAt, OffsetDateTime revokedAt, String revokeReason, String mailStatus, Integer mailAttempts,
-                             String createdBy, OffsetDateTime createdAt) {
+                             String createdBy, OffsetDateTime createdAt, Long customerId, Long existingCustomerId, int ticketsEnrolled) {
     }
 
     public record Skipped(String email, String code, String message) {

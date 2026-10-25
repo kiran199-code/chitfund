@@ -28,6 +28,12 @@ public final class ErrorStatus {
             Map.entry("INVITE_NOT_REVOCABLE", 409),
             Map.entry("INVITE_NOT_DECLINABLE", 409),
             Map.entry("GOOGLE_ACCOUNT_MISMATCH", 409),
+            Map.entry("INVITE_NOT_ACCEPTABLE", 409),
+            Map.entry("INVITE_NOT_AWAITING_PAYMENT", 409),
+            Map.entry("ENROLMENT_NOT_OPEN", 409),
+            Map.entry("EMAIL_CUSTOMER_MISMATCH", 409),
+            Map.entry("CUSTOMER_EMAIL_TAKEN", 409),
+            Map.entry("CUSTOMER_UNKNOWN", 404),
             Map.entry("TOO_MANY_REQUESTS", 429),
             Map.entry("CHIT_SERVICE_UNAVAILABLE", 502),
             Map.entry("SIGN_IN_NOT_CONFIGURED", 503));

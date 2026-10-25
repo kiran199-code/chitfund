@@ -147,6 +147,13 @@ services:
         value: batch-admin
       - key: BATCH_ADMIN_PASSWORD
         fromService: { type: web, name: chitfund-batch-service, envVarKey: BATCH_ADMIN_PASSWORD }
+      # The customer portal, for "Invite by e-mail" on a group's enrolment screen. Public address, no trailing slash.
+      - key: PORTAL_SERVICE_URL
+        sync: false
+      - key: PORTAL_ADMIN_USERNAME
+        value: portal-admin
+      - key: PORTAL_ADMIN_PASSWORD
+        fromService: { type: web, name: chitfund-portal-service, envVarKey: PORTAL_ADMIN_PASSWORD }
       - key: JAVA_TOOL_OPTIONS
         value: "-Xmx256m -Xss512k -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
 
