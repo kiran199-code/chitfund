@@ -230,6 +230,7 @@ public class PortalHarness {
         if (only.isEmpty() || only.equals("invitee")) inviteeScenarios();
         if (only.isEmpty() || only.equals("enrol")) enrolmentScenarios();
         if (only.isEmpty() || only.equals("offers")) offerScenarios();
+        if (only.isEmpty() || only.equals("site")) siteScenarios();
         System.out.println("\n" + passed + " passed, " + failed + " failed (" + jdbc.statements + " statements)");
         jdbc.close();
         System.exit(failed == 0 ? 0 : 1);
@@ -262,6 +263,23 @@ public class PortalHarness {
         eq("offer audit rows (4 created, 1 hidden, 1 updated)", 6L, count("SELECT count(*) FROM portal_audit WHERE entity_type='OFFER'"));
         eq("the DB itself rejects an end before the start", true, dbRejects("INSERT INTO portal_offer (title,audience,starts_on,ends_on,created_by) VALUES ('x','PUBLIC','2026-10-25','2026-10-01','s')"));
         eq("the DB itself rejects an unknown audience", true, dbRejects("INSERT INTO portal_offer (title,audience,starts_on,created_by) VALUES ('x','ALL','2026-10-25','s')"));
+    }
+
+    static void siteScenarios() {
+        System.out.println("== site settings: save, update, clear, public view");
+        com.chitfund.portal.site.SiteSettingsService svc = new com.chitfund.portal.site.SiteSettingsService(jdbc, new Audit(jdbc));
+        eq("nothing set: all blank", java.util.List.of("", "", "", ""), new java.util.ArrayList<>(svc.all().values()));
+        tx(() -> svc.save(java.util.Map.of("help_phone", "98765 43210", "payment_instructions", "UPI honest@upi"), "staff1"));
+        eq("saved", "98765 43210", svc.publicSite().helpPhone());
+        eq("how to pay saved", "UPI honest@upi", svc.text());
+        tx(() -> svc.save(java.util.Map.of("help_phone", "11111"), "staff2"));
+        eq("update replaces", "11111", svc.publicSite().helpPhone());
+        tx(() -> svc.save(java.util.Map.of("help_phone", "  "), "staff2"));
+        eq("blank clears", "", svc.publicSite().helpPhone());
+        eq("one row per key", 1L, count("SELECT count(*) FROM portal_setting WHERE setting_key='payment_instructions'"));
+        refused("unknown key", "VALIDATION_FAILED", () -> svc.save(java.util.Map.of("evil", "x"), "s"), false);
+        eq("how to pay is not in the public view", false, svc.publicSite().toString().contains("honest@upi"));
+        eq("audit rows", 4L, count("SELECT count(*) FROM portal_audit WHERE entity_type='SETTING'"));
     }
 
     static boolean dbRejects(String sql) {

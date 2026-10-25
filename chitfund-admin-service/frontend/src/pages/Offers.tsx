@@ -12,6 +12,53 @@ const TONE: Record<string, Tone> = { LIVE: 'good', SCHEDULED: 'info', ENDED: 'ne
 interface Draft { title: string; body: string; linkUrl: string; imageUrl: string; audience: 'PUBLIC' | 'MEMBERS'; startsOn: string; endsOn: string }
 const blank = (): Draft => ({ title: '', body: '', linkUrl: '', imageUrl: '', audience: 'MEMBERS', startsOn: todayIso(), endsOn: '' });
 
+type Settings = Record<string, string>;
+
+/** The organiser's text on the portal: how to pay, the help line (footer) and the office address. */
+function SettingsCard() {
+  const s = useLoad<Settings>(() => get<Settings>('/portal/settings'), []);
+  const [draft, setDraft] = useState<Settings | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<Notice>(null);
+  const v = draft ?? s.data;
+  const set = (k: string, val: string) => setDraft({ ...(v ?? {}), [k]: val });
+
+  async function save() {
+    if (!v) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      await send<Settings>('POST', '/portal/settings', v);
+      setNotice({ tone: 'good', text: 'Saved. Members see the change straight away.' });
+      setDraft(null);
+      s.reload();
+    } catch (e) {
+      setNotice({ tone: 'bad', text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card title="Text on the portal">
+      {s.loading && !s.data && <Loading />}
+      {s.error && <ErrorBox message={s.error} onRetry={s.reload} />}
+      {v && (
+        <>
+          {notice && <div className={`banner banner-${notice.tone}`} role="status">{notice.text}</div>}
+          <Field wide label="How to pay" hint="Shown to signed-in members on the Payments page: bank account, UPI id, office hours. Up to 1000 characters.">
+            <textarea rows={4} maxLength={1000} value={v.payment_instructions ?? ''} onChange={e => set('payment_instructions', e.target.value)} />
+          </Field>
+          <Field label="Help phone" hint="Shown in the footer of every page, also before sign-in."><input maxLength={30} value={v.help_phone ?? ''} onChange={e => set('help_phone', e.target.value)} /></Field>
+          <Field label="Help hours"><input maxLength={80} value={v.help_hours ?? ''} onChange={e => set('help_hours', e.target.value)} placeholder="Mon to Sat, 10 am to 6 pm" /></Field>
+          <Field wide label="Office address"><input maxLength={200} value={v.office_address ?? ''} onChange={e => set('office_address', e.target.value)} /></Field>
+          <p><button className="btn btn-primary" onClick={save} disabled={busy || draft === null}>{busy ? 'Saving...' : 'Save text'}</button></p>
+        </>
+      )}
+    </Card>
+  );
+}
+
 /** Offers and marketing material shown on the customer portal: text and links only, written here by staff. */
 export default function Offers() {
   const status = useLoad(() => get<{ enabled: boolean }>('/portal/status'), []);
@@ -81,7 +128,7 @@ export default function Offers() {
 
   return (
     <>
-      <PageHeader title="Portal offers" sub="Offers and marketing material that members see on the customer portal" />
+      <PageHeader title="Portal content" sub="Offers, how to pay and the help line that members see on the customer portal" />
       {status.loading && !status.data && <Loading what="Checking the customer portal" />}
       {status.error && <ErrorBox message={status.error} onRetry={status.reload} />}
       {status.data && !status.data.enabled && (
@@ -91,6 +138,7 @@ export default function Offers() {
       )}
       {status.data?.enabled && (
         <>
+          <SettingsCard />
           <Card title={editing ? `Edit offer #${editing}` : 'New offer'}>
             {notice && <div className={`banner banner-${notice.tone}`} role="status">{notice.text}</div>}
             <Field label="Title"><input value={draft.title} maxLength={120} onChange={e => set('title', e.target.value)} /></Field>

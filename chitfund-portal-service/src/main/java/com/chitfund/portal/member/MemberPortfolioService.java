@@ -41,7 +41,7 @@ public class MemberPortfolioService {
     public record Summary(int ticketsHeld, Due nextPayment, int overdueCount, BigDecimal overdueTotal, int liveAuctions, int upcomingAuctions, int openRequests) {
     }
 
-    public record PaymentsPage(boolean customer, List<Due> overdue, List<Due> outstanding, List<Due> upcoming, List<Payment> history) {
+    public record PaymentsPage(boolean customer, List<Due> overdue, List<Due> outstanding, List<Due> upcoming, List<Payment> history, String howToPay) {
     }
 
     public record BidInput(String groupCode, Integer cycleNo, Integer ticketNo, BigDecimal discountAmount) {
@@ -60,12 +60,14 @@ public class MemberPortfolioService {
     private final ChitEnrolmentGateway customers;
     private final ChitPortfolioGateway chit;
     private final OfferSource offers;
+    private final HowToPay howToPay;
     private final Audit audit;
 
-    public MemberPortfolioService(ChitEnrolmentGateway customers, ChitPortfolioGateway chit, OfferSource offers, Audit audit) {
+    public MemberPortfolioService(ChitEnrolmentGateway customers, ChitPortfolioGateway chit, OfferSource offers, HowToPay howToPay, Audit audit) {
         this.customers = customers;
         this.chit = chit;
         this.offers = offers;
+        this.howToPay = howToPay;
         this.audit = audit;
     }
 
@@ -128,12 +130,22 @@ public class MemberPortfolioService {
     public PaymentsPage payments(SessionMember me) {
         Long id = customerId(me);
         if (id == null) {
-            return new PaymentsPage(false, List.of(), List.of(), List.of(), List.of());
+            return new PaymentsPage(false, List.of(), List.of(), List.of(), List.of(), "");
         }
         List<Due> open = chit.dues(id, "OPEN", 0);
         List<Due> overdue = open.stream().filter(d -> "OVERDUE".equals(d.view()) || d.daysOverdue() > 0).toList();
         List<Due> outstanding = open.stream().filter(d -> !overdue.contains(d)).toList();
-        return new PaymentsPage(true, overdue, outstanding, chit.dues(id, "UPCOMING", UPCOMING_DAYS), chit.payments(id, HISTORY_LIMIT));
+        return new PaymentsPage(true, overdue, outstanding, chit.dues(id, "UPCOMING", UPCOMING_DAYS), chit.payments(id, HISTORY_LIMIT), instructions());
+    }
+
+    /** The instructions text never blocks the page: if settings cannot be read the page shows without it. */
+    private String instructions() {
+        try {
+            String t = howToPay.text();
+            return t == null ? "" : t;
+        } catch (RuntimeException e) {
+            return "";
+        }
     }
 
     public List<Auction> auctions(SessionMember me) {

@@ -11,7 +11,7 @@ import type { BusinessDateView } from '../types';
 const SECTIONS: { title: string | null; items: [string, string][] }[] = [
   { title: null, items: [['/', 'Overview']] },
   { title: 'Chit funds', items: [['/chit/groups', 'Groups'], ['/chit/groups/new', 'New group'], ['/chit/dues', 'Dues & payments']] },
-  { title: 'Customer portal', items: [['/offers', 'Offers']] },
+  { title: 'Customer portal', items: [['/offers', 'Offers & texts']] },
   { title: 'Calendar', items: [['/calendar', 'Business date & holidays']] },
   { title: 'Batch', items: [['/batch', 'Batch jobs'], ['/eod', 'End of day']] },
   { title: 'Administration', items: [['/maintenance', 'Maintenance']] },

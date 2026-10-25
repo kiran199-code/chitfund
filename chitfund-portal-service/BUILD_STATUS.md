@@ -105,6 +105,19 @@ exception. `signIn`, `view` and `decline` now use `@Transactional(noRollbackFor 
 - NOT verified: the admin Java (PortalOfferController and its test), Spring wiring of the new controllers, real HTTP between portal and chit service, Jackson reading the real chit JSON into the portal
   records (they ignore unknown fields; a renamed field would show as a missing value), the screens against the real API, Google sign-in in a browser.
 
+## Honest Savers branded portal (redesign of Customer Portal v2)
+
+- New look from the approved wireframes: brand name and tagline "Honest dealings. Happy savers.", logo mark, illustrations and icons drawn as inline SVG (no image files), warm green/marigold palette,
+  Fraunces and Nunito Sans from Google Fonts. Landing page for visitors (sign in, public offers, how a chit works), top menu on desktop and a five-item bottom bar on phones (Home, My chits, Payments,
+  Auctions, More). "Approvals" is now "Waiting on you". All earlier features are kept (sign-in/out, invitations accept/decline and their error states, dashboard, chits, payments, auctions with bidding, offers).
+- New: organiser-editable text (table `portal_setting`, V4): how to pay (signed-in members only, on Payments), help phone, help hours, office address (footer on every page). Edited in the admin console
+  under Customer portal > Offers & texts. API: public `GET /api/v1/portal/site`, admin `GET|POST /api/v1/portal/admin/settings`. Quick bid amounts (+500, +1,000, +5,000 over the best bid) shown when the best bid is visible.
+- The logo, colours and pictures are my own drawings and a first proposal, not a supplied brand kit; swap `frontend/src/brand.tsx` and the CSS variables at the top of `styles.css` to change them. Real photos need
+  an image-slot feature or files added to the app; none are included.
+- Verified here: 73 portal unit tests, 201 portal harness checks (PostgreSQL 16, incl. settings SQL), frontend typecheck and production build, desktop and phone screenshots against a mocked API (no console errors
+  except the expected 401 when signed out). NOT verified: admin Java (PortalSettingsController and test), Spring wiring, Google fonts and Google sign-in in a real browser, real data, dark mode (not provided: the page is light only),
+  screen-reader and keyboard use beyond basic semantics, Telugu/Hindi (English only).
+
 ## Not started
 
 Online payments, member approve/reject workflow, notifications and batch reminders.

@@ -88,7 +88,8 @@ export interface Due {
 export interface Payment {
   paymentRef: string; groupCode: string; groupName: string; ticketNo: number; amount: number; channel: string; status: string; businessDate: string;
 }
-export interface PaymentsPage { customer: boolean; overdue: Due[]; outstanding: Due[]; upcoming: Due[]; history: Payment[] }
+export interface PaymentsPage { customer: boolean; overdue: Due[]; outstanding: Due[]; upcoming: Due[]; history: Payment[]; howToPay: string }
+export interface Site { helpPhone: string; helpHours: string; officeAddress: string }
 export interface MemberRequest {
   kind: string; groupCode: string; groupName: string; ticketNo: number; status: string; inProgress: boolean; role: string; cycleNo?: number;
   amount?: number; held?: number; requestedAt?: string; decidedAt?: string;
@@ -111,6 +112,7 @@ export interface Overview {
 export interface BidResult { bidSeq: number; auctions: Auction[] }
 
 export const api = {
+  site: () => call<Site>('GET', '/site'),
   dashboard: () => call<Overview>('GET', '/me/dashboard'),
   tickets: () => call<Ticket[]>('GET', '/me/tickets'),
   payments: () => call<PaymentsPage>('GET', '/me/payments'),

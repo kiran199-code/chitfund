@@ -96,7 +96,7 @@ class MemberPortfolioServiceTest {
         svc = new MemberPortfolioService(chit, chit, d -> {
             if (offersDown) throw new IllegalStateException("table missing");
             return List.of();
-        }, audit);
+        }, () -> "Pay by UPI to honest@upi", audit);
     }
 
     static BigDecimal bd(long v) { return BigDecimal.valueOf(v); }
@@ -146,6 +146,12 @@ class MemberPortfolioServiceTest {
         assertTrue(o.unavailable().containsAll(List.of("auctions", "offers")));
         assertEquals(1, o.summary().ticketsHeld(), "the rest still shows");
         assertEquals(1, o.summary().overdueCount());
+    }
+
+    @Test
+    void paymentsPageCarriesTheOrganisersInstructions() {
+        assertEquals("Pay by UPI to honest@upi", svc.payments(ASHA).howToPay());
+        assertEquals("", svc.payments(STRANGER).howToPay());
     }
 
     @Test
