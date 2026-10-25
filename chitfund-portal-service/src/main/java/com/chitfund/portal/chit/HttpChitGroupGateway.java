@@ -40,8 +40,8 @@ public class HttpChitGroupGateway implements ChitGroupGateway, ChitEnrolmentGate
                                 @Value("${chit.service.base-url:}") String baseUrl,
                                 @Value("${chit.service.username:}") String username,
                                 @Value("${chit.service.password:}") String password,
-                                @Value("${chit.service.connect-timeout-seconds:5}") long connectTimeoutSeconds,
-                                @Value("${chit.service.request-timeout-seconds:20}") long requestTimeoutSeconds) {
+                                @Value("${chit.service.connect-timeout-seconds:15}") long connectTimeoutSeconds,
+                                @Value("${chit.service.request-timeout-seconds:90}") long requestTimeoutSeconds) {
         this.mapper = mapper;
         String b = baseUrl == null ? "" : baseUrl.trim();
         this.baseUrl = b.endsWith("/") ? b.substring(0, b.length() - 1) : b;
@@ -73,7 +73,8 @@ public class HttpChitGroupGateway implements ChitGroupGateway, ChitEnrolmentGate
             }
             return Optional.of(parse(mapper.readTree(resp.body())));
         } catch (IOException e) {
-            throw new PortalException("CHIT_SERVICE_UNAVAILABLE", "chitfund-service could not be reached: " + e.getMessage());
+            throw new PortalException("CHIT_SERVICE_UNAVAILABLE", "chitfund-service could not be reached (" + e.getClass().getSimpleName() + (e.getMessage() == null ? "" : ": " + e.getMessage())
+                    + "). If it is asleep on the free tier, wait a minute and try again; otherwise check CHIT_SERVICE_BASE_URL.");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new PortalException("CHIT_SERVICE_UNAVAILABLE", "The call to chitfund-service was interrupted");
@@ -156,7 +157,8 @@ public class HttpChitGroupGateway implements ChitGroupGateway, ChitEnrolmentGate
             }
             throw new PortalException("CHIT_SERVICE_UNAVAILABLE", "chitfund-service answered HTTP " + status + " for " + path);
         } catch (IOException e) {
-            throw new PortalException("CHIT_SERVICE_UNAVAILABLE", "chitfund-service could not be reached: " + e.getMessage());
+            throw new PortalException("CHIT_SERVICE_UNAVAILABLE", "chitfund-service could not be reached (" + e.getClass().getSimpleName() + (e.getMessage() == null ? "" : ": " + e.getMessage())
+                    + "). If it is asleep on the free tier, wait a minute and try again; otherwise check CHIT_SERVICE_BASE_URL.");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new PortalException("CHIT_SERVICE_UNAVAILABLE", "The call to chitfund-service was interrupted");

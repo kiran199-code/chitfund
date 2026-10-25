@@ -46,8 +46,9 @@ chit:
     base-url: ${CHIT_SERVICE_BASE_URL:http://localhost:8086}
     username: ${CHIT_SERVICE_USERNAME:chit-service}
     password: ${CHIT_SERVICE_PASSWORD:changeme}
-    connect-timeout-seconds: 5
-    request-timeout-seconds: 20
+    # Generous: a sleeping free-tier chitfund-service needs about a minute to wake.
+    connect-timeout-seconds: 15
+    request-timeout-seconds: 90
   portal:
     # Credential the admin console (or curl) uses for /api/v1/portal/admin/**. Different from the chit service credential.
     admin:
