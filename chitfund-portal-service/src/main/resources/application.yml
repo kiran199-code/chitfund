@@ -34,6 +34,11 @@ management:
     web:
       exposure:
         include: health,info
+  health:
+    # With no SMTP server configured (mail mode CONSOLE) the mail health check would try localhost:587, fail, and report the whole
+    # service DOWN, so the host's health check would kill it. Mail failures are handled by the outbox retry instead.
+    mail:
+      enabled: false
 
 chit:
   # How the portal reaches chitfund-service (HTTP Basic service credential, the same one the batch service uses).
