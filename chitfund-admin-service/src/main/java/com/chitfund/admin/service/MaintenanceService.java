@@ -112,6 +112,11 @@ public class MaintenanceService {
         return out;
     }
 
+    /** Asks chitfund-service to create {@code count} sample groups (chit value, tickets, start date). The chit service validates and answers with the new group codes. */
+    public JsonNode createSampleGroups(Map<String, Object> body, String actor) {
+        return chit.exchange(HttpMethod.POST, "/maintenance/sample-groups", Map.of(), body, actor, null);
+    }
+
     private static ObjectNode asObject(JsonNode n) {
         if (n instanceof ObjectNode o) {
             return o;

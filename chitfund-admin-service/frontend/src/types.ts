@@ -77,6 +77,15 @@ export interface MaintenanceStatus {
   businessDateMode: string | null;
   batch: MaintenanceBatch;
 }
+export interface SampleGroupsResult {
+  groupCodes: string[];
+  chitValue: number;
+  ticketCount: number;
+  subscription: number;
+  startDate: string;
+  createdBy: string;
+  message: string;
+}
 export interface ClearDataResult {
   deleted: Record<string, number>;
   totalRows: number;

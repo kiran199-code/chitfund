@@ -175,4 +175,19 @@ class MaintenanceServiceTest {
                 });
         assertThat(clearCalls()).isEqualTo(1L);
     }
+
+    @Test
+    void sampleGroupsAreRequestedFromTheChitServiceWithTheActor() {
+        chit.answer(HttpMethod.POST, "/maintenance/sample-groups", "{\"groupCodes\":[\"SAMPLE-001\"],\"message\":\"1 sample group(s) created\"}");
+        java.util.Map<String, Object> body = java.util.Map.of("count", 1, "chitValue", 100000, "ticketCount", 20, "startDate", "2026-12-01");
+
+        JsonNode r = service.createSampleGroups(body, "admin");
+
+        assertThat(r.path("groupCodes").get(0).asText()).isEqualTo("SAMPLE-001");
+        assertThat(chit.calls).hasSize(1);
+        assertThat(chit.calls.get(0).path()).isEqualTo("/maintenance/sample-groups");
+        assertThat(chit.calls.get(0).method()).isEqualTo(HttpMethod.POST);
+        assertThat(chit.calls.get(0).actor()).isEqualTo("admin");
+        assertThat(chit.calls.get(0).body()).isEqualTo(body);
+    }
 }

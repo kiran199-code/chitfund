@@ -40,4 +40,12 @@ public class MaintenanceController {
         }
         return service.clearData(user == null ? null : user.getName());
     }
+
+    @Operation(summary = "Create sample chit groups in DRAFT: count, chitValue, ticketCount, startDate (non-production only)",
+            description = "Passed to chitfund-service, which validates the values and refuses with 403 unless it runs with CHIT_RESET_ENABLED=true. "
+                    + "Makes SAMPLE-001, SAMPLE-002, ... with the given chit value, tickets (= cycles) and start date.")
+    @PostMapping("/sample-groups")
+    public JsonNode sampleGroups(@RequestBody Map<String, Object> body, Principal user) {
+        return service.createSampleGroups(body, user == null ? null : user.getName());
+    }
 }

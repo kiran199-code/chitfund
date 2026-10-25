@@ -186,6 +186,7 @@ public class Phase6Harness {
         if (only.isEmpty() || only.equals("transfer")) Scenarios.transfers();
         if (only.isEmpty() || only.equals("recovery")) Scenarios.recovery();
         if (only.isEmpty() || only.equals("prize")) Scenarios.prize();
+        if (only.isEmpty() || only.equals("sample")) sampleGroups();
         System.out.println("\n" + passed + " passed, " + failed + " failed (" + jdbc.statements + " statements)");
         jdbc.close();
         System.exit(failed == 0 ? 0 : 1);
@@ -203,5 +204,44 @@ public class Phase6Harness {
         eq("deposit held", d("1000.00"), p.depositHeld());
         check("a case is open", p.caseId() != null);
         ledgerIdentities("smoke", code);
+    }
+
+    static void sampleGroups() {
+        System.out.println("== maintenance: sample groups");
+        com.chitfund.service.maintenance.MaintenanceService m = new com.chitfund.service.maintenance.MaintenanceService(jdbc, null, groupSvc, true);
+        com.chitfund.service.maintenance.MaintenanceService off = new com.chitfund.service.maintenance.MaintenanceService(jdbc, null, groupSvc, false);
+        LocalDate start = LocalDate.of(2026, 12, 1);
+        var r = tx(() -> m.createSampleGroups(new com.chitfund.service.maintenance.MaintenanceDtos.SampleGroupsRequest(3, d("100000"), 20, start), "admin"));
+        eq("codes", java.util.List.of("SAMPLE-001", "SAMPLE-002", "SAMPLE-003"), r.groupCodes());
+        eq("subscription", d("5000.00"), r.subscription());
+        var g = groupSvc.get("SAMPLE-002");
+        eq("status", GroupStatus.DRAFT, g.status());
+        eq("chit value", d("100000.00"), g.chitValue());
+        eq("tickets", 20, g.ticketCount());
+        eq("cycles", 20, g.cycleCount());
+        eq("start date", start, g.startDate());
+        eq("created by", "admin", g.createdBy());
+        eq("cycles not generated before activation", 0, groupSvc.cycles("SAMPLE-002").size());
+
+        var r2 = tx(() -> m.createSampleGroups(new com.chitfund.service.maintenance.MaintenanceDtos.SampleGroupsRequest(2, d("250000"), 25, LocalDate.of(2027, 1, 1)), "admin"));
+        eq("numbering carries on", java.util.List.of("SAMPLE-004", "SAMPLE-005"), r2.groupCodes());
+        eq("second batch has its own values", d("10000.00"), groupSvc.get("SAMPLE-005").subscription());
+        eq("five sample groups in all", 5L, jdbc.queryForObject("SELECT count(*) FROM chit_group WHERE group_code LIKE 'SAMPLE-%'", Long.class));
+
+        // a sample group is a real group: it can be opened for enrolment
+        tx(() -> groupSvc.openEnrolment("SAMPLE-001", key(), "maker"));
+        eq("sample group can open for enrolment", GroupStatus.OPEN_FOR_ENROLMENT, groupSvc.get("SAMPLE-001").status());
+
+        // a gap in the numbering is not reused
+        jdbc.inTx(() -> jdbc.update("DELETE FROM chit_group_rules_version WHERE group_id = (SELECT id FROM chit_group WHERE group_code='SAMPLE-005')"));
+        jdbc.inTx(() -> jdbc.update("DELETE FROM chit_group WHERE group_code='SAMPLE-005'"));
+        var r3 = tx(() -> m.createSampleGroups(new com.chitfund.service.maintenance.MaintenanceDtos.SampleGroupsRequest(1, d("100000"), 20, start), "admin"));
+        eq("numbering follows the highest remaining", java.util.List.of("SAMPLE-005"), r3.groupCodes());
+
+        long before = jdbc.queryForObject("SELECT count(*) FROM chit_group", Long.class);
+        refused("switch off", "RESET_DISABLED", () -> off.createSampleGroups(new com.chitfund.service.maintenance.MaintenanceDtos.SampleGroupsRequest(1, d("100000"), 20, start), "admin"));
+        refused("chit value that does not divide", "VALIDATION_FAILED", () -> m.createSampleGroups(new com.chitfund.service.maintenance.MaintenanceDtos.SampleGroupsRequest(1, d("10000"), 3, start), "admin"));
+        eq("refusals created nothing", before, jdbc.queryForObject("SELECT count(*) FROM chit_group", Long.class));
+        check("audit rows written for the sample groups", jdbc.queryForObject("SELECT count(*) FROM audit_log WHERE entity_ref LIKE 'SAMPLE-%' AND action='CREATED'", Long.class) >= 5);
     }
 }

@@ -4,7 +4,7 @@ import DataTable, { Col } from '../components/DataTable';
 import { Badge, Card, ErrorBox, Loading, PageHeader } from '../components/ui';
 import { count, date } from '../format';
 import { useLoad } from '../hooks';
-import type { ClearDataResult, MaintenanceStatus } from '../types';
+import type { ClearDataResult, MaintenanceStatus, SampleGroupsResult } from '../types';
 
 const TABLE_NAMES: Record<string, string> = {
   chit_group: 'Chit groups',
@@ -81,6 +81,7 @@ export default function Maintenance() {
       {notice && <div className={`banner banner-${notice.tone}`} role="status">{notice.text}</div>}
       {loading && !data && <Loading />}
       {error && <ErrorBox message={error} onRetry={reload} />}
+      {data && <SampleGroupsCard enabled={data.resetEnabled} businessDate={data.businessDate} onDone={text => { setNotice({ tone: 'good', text }); reload(); }} />}
       {data && (
         <section className="card danger-zone">
           <header className="card-head">
@@ -151,6 +152,76 @@ export default function Maintenance() {
         />
       )}
     </>
+  );
+}
+
+/** First day of the month after the given yyyy-mm-dd (or after today), as yyyy-mm-dd: a sensible default start date. */
+function nextMonthStart(from: string | null | undefined): string {
+  const m = /^(\d{4})-(\d{2})-\d{2}$/.exec(from ?? '');
+  const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, 1) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  d.setMonth(d.getMonth() + 1);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-01`;
+}
+
+function SampleGroupsCard({ enabled, businessDate, onDone }: { enabled: boolean; businessDate: string | null; onDone: (text: string) => void }) {
+  const [count, setCount] = useState('1');
+  const [chitValue, setChitValue] = useState('100000');
+  const [tickets, setTickets] = useState('20');
+  const [startDate, setStartDate] = useState(() => nextMonthStart(businessDate));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const n = Number(count);
+  const t = Number(tickets);
+  const v = Number(chitValue);
+  const perTicket = Number.isFinite(v) && Number.isInteger(t) && t > 0 ? v / t : NaN;
+  const valid = Number.isInteger(n) && n >= 1 && n <= 20 && Number.isInteger(t) && t >= 2 && t <= 100 && v > 0 && !!startDate;
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!valid || busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await send<SampleGroupsResult>('POST', '/maintenance/sample-groups', { count: n, chitValue: v, ticketCount: t, startDate });
+      onDone(r.message);
+    } catch (ex) {
+      setErr(ex instanceof Error ? ex.message : String(ex));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="card">
+      <header className="card-head"><h3>Create sample groups</h3></header>
+      <p className="muted">
+        Makes new chit groups named SAMPLE-001, SAMPLE-002 and so on (the next free numbers) in Draft, with the values below. Everything else is
+        fixed: monthly, instalment due on the 5th, auction on the 10th, 5% commission, 5 to 40% discount, no fees. The number of cycles equals the
+        number of tickets. Open a group for enrolment from the Groups screen.
+      </p>
+      {!enabled && (
+        <div className="banner banner-warn">
+          Switched off on chitfund-service. Set CHIT_RESET_ENABLED=true on it (Render: Environment tab) and redeploy to allow it.
+        </div>
+      )}
+      <form onSubmit={submit}>
+        <div className="form-grid">
+          <label className="field"><span>Number of groups (1 to 20)</span>
+            <input type="number" min={1} max={20} step={1} value={count} onChange={e => setCount(e.target.value)} disabled={!enabled || busy} /></label>
+          <label className="field"><span>Chit value (Rs)</span>
+            <input type="number" min={1} step="0.01" value={chitValue} onChange={e => setChitValue(e.target.value)} disabled={!enabled || busy} /></label>
+          <label className="field"><span>Tickets (2 to 100)</span>
+            <input type="number" min={2} max={100} step={1} value={tickets} onChange={e => setTickets(e.target.value)} disabled={!enabled || busy} /></label>
+          <label className="field"><span>Start date</span>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} disabled={!enabled || busy} /></label>
+        </div>
+        {Number.isFinite(perTicket) && <p className="muted">Subscription per ticket: Rs {perTicket.toLocaleString('en-IN', { maximumFractionDigits: 2 })}. The chit value must divide evenly by the tickets.</p>}
+        {err && <div className="banner banner-bad" role="alert">{err}</div>}
+        <button type="submit" className="btn" disabled={!enabled || !valid || busy}>{busy ? 'Creating...' : 'Create sample groups'}</button>
+      </form>
+    </section>
   );
 }
 
