@@ -28,7 +28,7 @@ import java.util.Optional;
  * chitfund-service (HTTP 4xx) becomes a PortalException that keeps chitfund-service's own error code and message.
  */
 @Component
-public class HttpChitGroupGateway implements ChitGroupGateway, ChitEnrolmentGateway {
+public class HttpChitGroupGateway implements ChitGroupGateway, ChitEnrolmentGateway, ChitPortfolioGateway {
 
     private final ObjectMapper mapper;
     private final HttpClient http;
@@ -125,14 +125,69 @@ public class HttpChitGroupGateway implements ChitGroupGateway, ChitEnrolmentGate
         return n.path("ticketNo").asInt();
     }
 
+    // ---- customer portfolio -------------------------------------------------------------------------------------------------
+
+    private <T> List<T> list(JsonNode n, Class<T> type) {
+        return mapper.convertValue(n, mapper.getTypeFactory().constructCollectionType(List.class, type));
+    }
+
+    private static String customerPath(long customerId, String tail) {
+        return "/api/v1/chit/customers/" + customerId + tail;
+    }
+
+    @Override
+    public List<Ticket> tickets(long customerId) {
+        return list(call("GET", customerPath(customerId, "/tickets"), null, null), Ticket.class);
+    }
+
+    @Override
+    public List<Payment> payments(long customerId, int limit) {
+        return list(call("GET", customerPath(customerId, "/payments?limit=" + limit), null, null), Payment.class);
+    }
+
+    @Override
+    public List<Due> dues(long customerId, String view, int withinDays) {
+        JsonNode n = call("GET", "/api/v1/chit/dues?customerId=" + customerId + "&view=" + enc(view) + "&withinDays=" + withinDays + "&limit=200", null, null);
+        return list(n.path("rows"), Due.class);
+    }
+
+    @Override
+    public List<Request> requests(long customerId) {
+        return list(call("GET", customerPath(customerId, "/requests"), null, null), Request.class);
+    }
+
+    @Override
+    public List<Auction> auctions(long customerId) {
+        return list(call("GET", customerPath(customerId, "/auctions"), null, null), Auction.class);
+    }
+
+    @Override
+    public int placeBid(String groupCode, int cycleNo, int ticketNo, BigDecimal discountAmount, long customerId, String idempotencyKey) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("ticketNo", ticketNo);
+        body.put("discountAmount", discountAmount);
+        JsonNode n = call("POST", "/api/v1/chit/groups/" + enc(groupCode) + "/cycles/" + cycleNo + "/auction/bids", body, idempotencyKey, "portal-customer-" + customerId);
+        return n.path("bidSeq").asInt();
+    }
+
+    @Override
+    public void withdrawBid(String groupCode, int cycleNo, int bidSeq, String reason, long customerId, String idempotencyKey) {
+        call("POST", "/api/v1/chit/groups/" + enc(groupCode) + "/cycles/" + cycleNo + "/auction/bids/" + bidSeq + "/withdraw", Map.of("reason", reason),
+                idempotencyKey, "portal-customer-" + customerId);
+    }
+
     /** One call; returns the JSON body. 4xx keeps chitfund-service's code and message; anything else is CHIT_SERVICE_UNAVAILABLE. */
     private JsonNode call(String method, String path, Object body, String idempotencyKey) {
+        return call(method, path, body, idempotencyKey, "chitfund-portal-service");
+    }
+
+    private JsonNode call(String method, String path, Object body, String idempotencyKey, String actor) {
         if (baseUrl.isEmpty()) {
             throw new PortalException("CHIT_SERVICE_UNAVAILABLE", "The chitfund service address is not set (CHIT_SERVICE_BASE_URL)");
         }
         try {
             HttpRequest.Builder req = HttpRequest.newBuilder(URI.create(baseUrl + path)).timeout(requestTimeout)
-                    .header("Accept", "application/json").header("X-Actor", "chitfund-portal-service");
+                    .header("Accept", "application/json").header("X-Actor", actor);
             if (authorization != null) {
                 req.header("Authorization", authorization);
             }

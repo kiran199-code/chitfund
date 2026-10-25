@@ -208,14 +208,20 @@ public class CollectionReadService {
 
     @Transactional(readOnly = true)
     public DuesPage dues(String view, String groupCode, LocalDate today, int withinDays, int limit, int offset) {
+        return dues(view, groupCode, null, today, withinDays, limit, offset);
+    }
+
+    /** As above, optionally only for the tickets of one customer. */
+    @Transactional(readOnly = true)
+    public DuesPage dues(String view, String groupCode, Long customerId, LocalDate today, int withinDays, int limit, int offset) {
         String v = view == null || view.isBlank() ? VIEW_OVERDUE : view.trim().toUpperCase();
         String group = groupCode == null || groupCode.isBlank() ? null : groupCode.trim();
         int size = clamp(limit, 1, 500, 100);
         int skip = Math.max(0, offset);
         List<CollectionRepository.DueRecord> records = switch (v) {
-            case VIEW_UPCOMING -> repo.upcomingDues(today, today.plusDays(clamp(withinDays, 1, 366, 30)), group, size, skip);
-            case VIEW_OVERDUE -> repo.openDues(today, group, size, skip);
-            case VIEW_OPEN -> repo.openDues(null, group, size, skip);
+            case VIEW_UPCOMING -> repo.upcomingDues(today, today.plusDays(clamp(withinDays, 1, 366, 30)), group, customerId, size, skip);
+            case VIEW_OVERDUE -> repo.openDues(today, group, customerId, size, skip);
+            case VIEW_OPEN -> repo.openDues(null, group, customerId, size, skip);
             default -> throw ChitException.badRequest("VALIDATION_FAILED", "view must be UPCOMING, OVERDUE or OPEN");
         };
         List<DueRow> rows = records.stream().map(r -> {

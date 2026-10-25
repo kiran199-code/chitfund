@@ -268,31 +268,43 @@ public class CollectionRepository {
 
     /** Raised demands with something owed. {@code overdueBefore} restricts to demands due before that day (null: all open ones). */
     public List<DueRecord> openDues(LocalDate overdueBefore, String groupCode, int limit, int offset) {
+        return openDues(overdueBefore, groupCode, null, limit, offset);
+    }
+
+    /** As above, optionally only for one customer's tickets. */
+    public List<DueRecord> openDues(LocalDate overdueBefore, String groupCode, Long customerId, int limit, int offset) {
         return jdbc.query("SELECT g.group_code, g.name, t.ticket_no, t.customer_id, t.status AS ticket_status, c.cycle_no, d.demand_ref, d.due_date, "
                         + "GREATEST(d.subscription_amount - d.dividend_adjustment - d.subscription_paid, 0) AS sub_out, "
                         + "GREATEST(d.late_fee_accrued - d.late_fee_paid, 0) AS fee_out "
                         + "FROM chit_demand d JOIN chit_cycle c ON c.id = d.cycle_id JOIN chit_group g ON g.id = c.group_id "
                         + "JOIN chit_ticket t ON t.id = d.ticket_id WHERE d.status = 'OPEN' "
                         + "AND (?::date IS NULL OR d.due_date < ?::date) AND (?::text IS NULL OR g.group_code = ?::text) "
+                        + "AND (?::bigint IS NULL OR t.customer_id = ?::bigint) "
                         + "ORDER BY d.due_date, g.group_code, t.ticket_no LIMIT ? OFFSET ?",
                 (rs, i) -> new DueRecord(rs.getString("group_code"), rs.getString("name"), rs.getInt("ticket_no"), rs.getLong("customer_id"),
                         rs.getString("ticket_status"), rs.getInt("cycle_no"), rs.getString("demand_ref"), rs.getObject("due_date", LocalDate.class),
                         rs.getBigDecimal("sub_out"), rs.getBigDecimal("fee_out")),
                 overdueBefore == null ? null : Date.valueOf(overdueBefore), overdueBefore == null ? null : Date.valueOf(overdueBefore),
-                groupCode, groupCode, limit, offset);
+                groupCode, groupCode, customerId, customerId, limit, offset);
     }
 
     /** Instalments not raised yet: SCHEDULED cycles of collecting groups falling due within the window, one row per live ticket. */
     public List<DueRecord> upcomingDues(LocalDate from, LocalDate to, String groupCode, int limit, int offset) {
+        return upcomingDues(from, to, groupCode, null, limit, offset);
+    }
+
+    /** As above, optionally only for one customer's tickets. */
+    public List<DueRecord> upcomingDues(LocalDate from, LocalDate to, String groupCode, Long customerId, int limit, int offset) {
         return jdbc.query("SELECT g.group_code, g.name, t.ticket_no, t.customer_id, t.status AS ticket_status, c.cycle_no, c.due_date, g.subscription "
                         + "FROM chit_cycle c JOIN chit_group g ON g.id = c.group_id JOIN chit_ticket t ON t.group_id = g.id "
                         + "WHERE c.status = 'SCHEDULED' AND g.status IN ('ACTIVE','CLOSING') AND c.due_date BETWEEN ? AND ? "
                         + "AND t.status IN ('ACTIVE','PRIZED','DEFAULTED','TRANSFERRED') AND (?::text IS NULL OR g.group_code = ?::text) "
+                        + "AND (?::bigint IS NULL OR t.customer_id = ?::bigint) "
                         + "ORDER BY c.due_date, g.group_code, t.ticket_no LIMIT ? OFFSET ?",
                 (rs, i) -> new DueRecord(rs.getString("group_code"), rs.getString("name"), rs.getInt("ticket_no"), rs.getLong("customer_id"),
                         rs.getString("ticket_status"), rs.getInt("cycle_no"), null, rs.getObject("due_date", LocalDate.class),
                         rs.getBigDecimal("subscription"), BigDecimal.ZERO),
-                Date.valueOf(from), Date.valueOf(to), groupCode, groupCode, limit, offset);
+                Date.valueOf(from), Date.valueOf(to), groupCode, groupCode, customerId, customerId, limit, offset);
     }
 
     // ---- mapping --------------------------------------------------------------------------------------------------

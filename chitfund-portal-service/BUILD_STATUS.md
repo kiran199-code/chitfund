@@ -85,11 +85,31 @@ exception. `signIn`, `view` and `decline` now use `@Transactional(noRollbackFor 
   and the screens in a browser. A `Invitee` record with two constructors must deserialise through Jackson's canonical constructor: confirm with a real request.
 - Needs on Render: admin service `PORTAL_SERVICE_URL`, `PORTAL_ADMIN_PASSWORD` (same value as the portal's), `PORTAL_ADMIN_USERNAME`; portal `CHIT_SERVICE_URL` and credentials.
 
+## Customer Portal v2 (sign-in, dashboard, tickets, payments, auctions, approvals, offers)
+
+- Sign-in is Google only (unchanged). A signed-out visitor sees the sign-in card and the offers staff marked PUBLIC. A signed-in member gets pages Dashboard, My tickets,
+  Payments, Auctions, Approvals, Offers (address after `#`, e.g. `/#/auctions`). A sign-in that is not a customer of the chit house sees a "No chit account yet" page.
+- Member API under `/api/v1/portal/me/`: `GET dashboard|tickets|payments|auctions|requests`, `POST bids`, `POST bids/withdraw` (needs `Idempotency-Key`). The customer id is NEVER
+  taken from the request: it is looked up from the signed-in e-mail (`lookupCustomers`) on every call. A bid is checked against the member's own auction list first (live, `canBid`,
+  ticket among their `eligibleTickets`); a withdrawal against their own valid bids. A ticket or bid that is not theirs gets the same refusal as one that is not allowed
+  (`BID_NOT_ALLOWED`, 409). The chit-service idempotency key is `PORTAL-BID:<customerId>:<browser key>`, so two members can never collide. Bids and withdrawals are audited.
+- chitfund-service gained read-only customer-scoped endpoints `/api/v1/chit/customers/{id}/tickets|payments|requests|auctions` and a `customerId` filter on `/dues`
+  (permission `chit.customer.portfolio.read`, see IAM_PERMISSIONS.txt). Bids go through the existing bid endpoints and rules.
+- Offers: table `portal.portal_offer` (V3), admin API `/api/v1/portal/admin/offers` (create, update, hide, show), public `GET /api/v1/portal/offers/public`; members also get them on the
+  dashboard. Text and http(s) links only (no uploads); the server rejects `javascript:`/`data:` links and the page checks again. Admin console: Customer portal > Offers (CHIT_OPS).
+- Deviations from what you asked, by design of the existing system: (1) auctions have no closing time (staff open and close them), so the page shows state and date, with no countdown, and refreshes
+  every 8 seconds while one is live and the tab is visible; (2) "approvals" is a read-only list of requests involving the member (transfers, prize payouts): chitfund-service has no
+  member-consent step, so there is nothing for a member to approve or reject yet (that needs a new workflow); (3) payments are view-only, the organiser records receipts.
+- Verified here: 70 portal unit tests (incl. cross-member isolation with fakes), 192 portal harness checks on PostgreSQL 16 (incl. offers SQL), chitfund-service 273 unit tests and 228 harness
+  checks (59 portfolio), both frontends typecheck, the member pages ran in a headless browser against a mocked API (no console errors; a bid was placed and shown), phone and desktop screenshots looked right.
+- NOT verified: the admin Java (PortalOfferController and its test), Spring wiring of the new controllers, real HTTP between portal and chit service, Jackson reading the real chit JSON into the portal
+  records (they ignore unknown fields; a renamed field would show as a missing value), the screens against the real API, Google sign-in in a browser.
+
 ## Not started
 
-Step 4 payments, Step 5 bids, Step 6 real notifications and batch reminders.
+Online payments, member approve/reject workflow, notifications and batch reminders.
 
 ## Run
 
     /home/claude/build_portal.sh          # compile + unit tests (sandbox only)
-    harness/run.sh [invite|lifecycle|mail|auth|invitee|enrol]   # needs the sandbox Postgres on port 5544
+    harness/run.sh [invite|lifecycle|mail|auth|invitee|enrol|offers]   # needs the sandbox Postgres on port 5544

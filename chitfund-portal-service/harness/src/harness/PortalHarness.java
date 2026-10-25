@@ -229,9 +229,43 @@ public class PortalHarness {
         if (only.isEmpty() || only.equals("auth")) authScenarios();
         if (only.isEmpty() || only.equals("invitee")) inviteeScenarios();
         if (only.isEmpty() || only.equals("enrol")) enrolmentScenarios();
+        if (only.isEmpty() || only.equals("offers")) offerScenarios();
         System.out.println("\n" + passed + " passed, " + failed + " failed (" + jdbc.statements + " statements)");
         jdbc.close();
         System.exit(failed == 0 ? 0 : 1);
+    }
+
+    // ---- offers (real SQL) ----
+
+    static void offerScenarios() {
+        System.out.println("== offers: create, live window, audience, hide, update");
+        com.chitfund.portal.offer.OfferService svc = new com.chitfund.portal.offer.OfferService(new com.chitfund.portal.offer.OfferRepository(jdbc), new Audit(jdbc));
+        java.time.LocalDate d = java.time.LocalDate.of(2026, 10, 25);
+        var pub = tx(() -> svc.create(new com.chitfund.portal.offer.OfferService.OfferInput("Diwali chit", "Join before 5 Nov", "https://example.com/d", "https://example.com/d.png", "PUBLIC", d.minusDays(1), d.plusDays(10), null), "staff1", d));
+        var mem = tx(() -> svc.create(new com.chitfund.portal.offer.OfferService.OfferInput("Members only", "", null, null, "MEMBERS", d, null, null), "staff1", d));
+        var soon = tx(() -> svc.create(new com.chitfund.portal.offer.OfferService.OfferInput("Next month", "", null, null, "PUBLIC", d.plusDays(5), null, null), "staff1", d));
+        var old = tx(() -> svc.create(new com.chitfund.portal.offer.OfferService.OfferInput("Ended", "", null, null, "PUBLIC", d.minusDays(20), d.minusDays(2), null), "staff1", d));
+        eq("statuses", java.util.List.of("LIVE", "LIVE", "SCHEDULED", "ENDED"), java.util.List.of(pub.status(), mem.status(), soon.status(), old.status()));
+        eq("visitors see live public offers only", java.util.List.of("Diwali chit"), svc.forVisitors(d).stream().map(o -> o.title()).toList());
+        eq("members see live public and members offers", java.util.Set.of("Diwali chit", "Members only"), new java.util.HashSet<>(svc.forMembers(d).stream().map(o -> o.title()).toList()));
+        eq("the scheduled one appears on its start day", true, svc.forVisitors(d.plusDays(5)).stream().anyMatch(o -> o.title().equals("Next month")));
+        eq("the last day is inclusive", true, svc.forVisitors(d.plusDays(10)).stream().anyMatch(o -> o.title().equals("Diwali chit")));
+        eq("gone the day after", false, svc.forVisitors(d.plusDays(11)).stream().anyMatch(o -> o.title().equals("Diwali chit")));
+        var hidden = tx(() -> svc.setActive(pub.id(), false, "staff2", d));
+        eq("hidden status", "HIDDEN", hidden.status());
+        eq("a hidden offer is not shown", false, svc.forMembers(d).stream().anyMatch(o -> o.id() == pub.id()));
+        var shown = tx(() -> svc.update(pub.id(), new com.chitfund.portal.offer.OfferService.OfferInput("Diwali chit 2", "x", null, null, "MEMBERS", d, null, true), "staff2", d));
+        eq("update re-shows and changes audience", java.util.List.of("LIVE", "MEMBERS", "Diwali chit 2"), java.util.List.of(shown.status(), shown.audience(), shown.title()));
+        eq("members-only now hidden from visitors", false, svc.forVisitors(d).stream().anyMatch(o -> o.id() == pub.id()));
+        refused("update of a missing offer", "NOT_FOUND", () -> svc.update(99999, new com.chitfund.portal.offer.OfferService.OfferInput("x", "", null, null, "PUBLIC", d, null, null), "s", d), false);
+        refused("bad link", "VALIDATION_FAILED", () -> svc.create(new com.chitfund.portal.offer.OfferService.OfferInput("x", "", "javascript:alert(1)", null, "PUBLIC", d, null, null), "s", d), false);
+        eq("offer audit rows (4 created, 1 hidden, 1 updated)", 6L, count("SELECT count(*) FROM portal_audit WHERE entity_type='OFFER'"));
+        eq("the DB itself rejects an end before the start", true, dbRejects("INSERT INTO portal_offer (title,audience,starts_on,ends_on,created_by) VALUES ('x','PUBLIC','2026-10-25','2026-10-01','s')"));
+        eq("the DB itself rejects an unknown audience", true, dbRejects("INSERT INTO portal_offer (title,audience,starts_on,created_by) VALUES ('x','ALL','2026-10-25','s')"));
+    }
+
+    static boolean dbRejects(String sql) {
+        try { jdbc.update(sql); return false; } catch (RuntimeException e) { return true; }
     }
 
     // ---- 1. a batch of invitations, replay, group rules ----

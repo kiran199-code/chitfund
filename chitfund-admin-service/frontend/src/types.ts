@@ -232,3 +232,8 @@ export interface PortalSkipped { email: string | null; code: string; message: st
 export interface PortalBatchResult {
   groupCode: string; created: PortalInvitation[]; skipped: PortalSkipped[]; seatsLeft: number | null; pendingInvites: number; replayed: boolean;
 }
+
+export interface PortalOffer {
+  id: number; title: string; body: string; linkUrl: string | null; imageUrl: string | null; audience: 'PUBLIC' | 'MEMBERS';
+  startsOn: string; endsOn: string | null; active: boolean; createdBy: string; status: 'LIVE' | 'SCHEDULED' | 'ENDED' | 'HIDDEN';
+}

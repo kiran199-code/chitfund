@@ -38,3 +38,51 @@ h1 { font-size: 22px; line-height: 1.25; margin: 0 0 8px; }
 .link { font: inherit; background: none; border: 0; color: var(--brand); cursor: pointer; padding: 0; text-decoration: underline; }
 a { color: var(--brand); }
 @media (max-width: 480px) { .facts > div { flex-direction: column; gap: 2px; } .facts dd { text-align: left; } }
+
+/* ---- member pages ---- */
+.main-wide { max-width: 960px; }
+.hello { margin-bottom: 12px; }
+.tabs { display: flex; gap: 4px; overflow-x: auto; margin: 0 -16px 16px; padding: 0 16px 4px; border-bottom: 1px solid var(--line); -webkit-overflow-scrolling: touch; }
+.tab { flex: none; padding: 10px 14px; text-decoration: none; color: var(--muted); border-bottom: 3px solid transparent; font-weight: 600; white-space: nowrap; }
+.tab-on { color: var(--brand); border-bottom-color: var(--brand); }
+h2 { font-size: 18px; margin: 20px 0 8px; }
+h3 { font-size: 15px; margin: 16px 0 6px; }
+.card { margin-bottom: 16px; }
+.card h2:first-child, .card-head h2 { margin-top: 0; }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.card-live { border-color: var(--good); }
+.hello + .tabs { margin-top: 0; }
+.tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; }
+@media (min-width: 720px) { .tiles { grid-template-columns: repeat(5, 1fr); } }
+.tile { font: inherit; text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
+.tile span { color: var(--muted); font-size: 13px; }
+.tile strong { font-size: 20px; line-height: 1.2; }
+.tile em { font-style: normal; color: var(--muted); font-size: 13px; }
+.tile-bad { border-color: var(--danger); } .tile-bad strong { color: var(--err); }
+.tile-good { border-color: var(--good); } .tile-good strong { color: var(--good); }
+.rows { list-style: none; margin: 0; padding: 0; }
+.row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.row:last-child { border-bottom: 0; }
+.amount { text-align: right; font-weight: 600; white-space: nowrap; }
+.badge { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid var(--line); color: var(--muted); }
+.badge-good { color: var(--good); border-color: var(--good); } .badge-bad { color: var(--err); border-color: var(--err); }
+.badge-warn { color: #8a5a00; border-color: #c88a00; } .badge-info { color: var(--brand); border-color: var(--brand); }
+@media (prefers-color-scheme: dark) { .badge-warn { color: #f0c36a; border-color: #b58a2c; } }
+.empty { margin: 4px 0; }
+.note { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--brand); border-radius: 8px; padding: 10px 14px; margin: 0 0 16px; color: var(--muted); font-size: 14px; }
+.banner { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin: 0 0 16px; }
+.banner-good { border-color: var(--good); color: var(--good); }
+.ok { color: var(--good); }
+.bar { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; margin-top: 4px; }
+.bar span { display: block; height: 100%; background: var(--brand); }
+.bid { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; max-width: 360px; }
+.bid label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--muted); }
+.bid input, .bid select { font: inherit; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+.offers { display: grid; grid-template-columns: 1fr; gap: 12px; margin-bottom: 16px; }
+@media (min-width: 640px) { .offers { grid-template-columns: repeat(2, 1fr); } }
+.offer { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 6px; }
+.offer img { width: 100%; max-height: 180px; object-fit: cover; border-radius: 8px; }
+.offer h3 { margin: 0; font-size: 17px; } .offer p { margin: 0; }
+.offer .btn { align-self: flex-start; text-decoration: none; margin-top: 4px; }
+.public-offers { max-width: 720px; margin: 32px auto 0; }
+.btn:focus-visible, .tab:focus-visible, .tile:focus-visible, .link:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }

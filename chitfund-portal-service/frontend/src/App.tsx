@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ApiError, Invitation, Member, PortalConfig, api } from './api';
+import { ApiError, Invitation, Member, Offer, PortalConfig, api } from './api';
 import { dateOnly, dateTime, rupees } from './format';
 import GoogleButton from './google';
+import { Approvals, Auctions, Dashboard, OfferCards, Offers, Payments, Tickets, useLoad } from './member';
 
 type Session = { state: 'loading' } | { state: 'out' } | { state: 'in'; member: Member };
 
@@ -68,20 +69,23 @@ export default function App() {
           </div>
         )}
       </header>
-      <main className="main">
+      <main className={session.state === 'in' && !token ? 'main main-wide' : 'main'}>
         {session.state === 'loading' && <p className="muted">Loading...</p>}
         {session.state === 'out' && (
-          <SignInCard
-            config={config}
-            configError={configError}
-            busy={busy}
-            error={signInError}
-            onCredential={onCredential}
-            invited={token !== null}
-          />
+          <>
+            <SignInCard
+              config={config}
+              configError={configError}
+              busy={busy}
+              error={signInError}
+              onCredential={onCredential}
+              invited={token !== null}
+            />
+            {token === null && <PublicOffers />}
+          </>
         )}
         {session.state === 'in' && token && <InvitePage token={token} member={session.member} onSignOut={signOut} />}
-        {session.state === 'in' && !token && <Home member={session.member} />}
+        {session.state === 'in' && !token && <Portal member={session.member} />}
       </main>
       <footer className="foot">Your sign-in is handled by Google. No password is stored here.</footer>
     </div>
@@ -103,7 +107,7 @@ function SignInCard(props: {
       <p className="muted">
         {props.invited
           ? 'Sign in with the Google account for the email address the invitation was sent to. You can then review the group and reply.'
-          : 'Sign in with your Google account to see your invitations.'}
+          : 'Sign in with your Google account to see your tickets, payments and auctions.'}
       </p>
       {props.configError && <p className="error">{props.configError}</p>}
       {config && !config.googleClientId && <p className="error">Sign-in is not set up yet. Please contact the organiser.</p>}
@@ -115,15 +119,51 @@ function SignInCard(props: {
   );
 }
 
-function Home({ member }: { member: Member }) {
+/** What a visitor sees before signing in: the offers staff marked public. Failing quietly is right here; the sign-in card is the point. */
+function PublicOffers() {
+  const s = useLoad<Offer[]>(api.publicOffers);
+  if (!s.data || s.data.length === 0) return null;
   return (
-    <section className="card narrow">
-      <h1>Welcome{member.displayName ? `, ${member.displayName}` : ''}</h1>
-      <p>You are signed in as <strong>{member.email}</strong>.</p>
-      <p className="muted">
-        To review an invitation, open the link in the invitation email you received. Make sure it was sent to this email address.
-      </p>
+    <section className="public-offers">
+      <h2>Current offers</h2>
+      <OfferCards offers={s.data} />
     </section>
+  );
+}
+
+const VIEWS: [string, string][] = [
+  ['dashboard', 'Dashboard'], ['tickets', 'My tickets'], ['payments', 'Payments'], ['auctions', 'Auctions'], ['approvals', 'Approvals'], ['offers', 'Offers'],
+];
+
+function viewFromHash(): string {
+  const h = window.location.hash.replace(/^#\/?/, '');
+  return VIEWS.some(([k]) => k === h) ? h : 'dashboard';
+}
+
+/** The signed-in member's pages. The address after # picks the page, so there is nothing for the server to route. */
+function Portal({ member }: { member: Member }) {
+  const [view, setView] = useState(viewFromHash);
+  useEffect(() => {
+    const on = () => setView(viewFromHash());
+    window.addEventListener('hashchange', on);
+    return () => window.removeEventListener('hashchange', on);
+  }, []);
+  const go = useCallback((v: string) => { window.location.hash = '/' + v; }, []);
+  return (
+    <>
+      <h1 className="hello">Hello{member.displayName ? `, ${member.displayName.split(' ')[0]}` : ''}</h1>
+      <nav className="tabs" aria-label="Portal pages">
+        {VIEWS.map(([k, text]) => (
+          <a key={k} href={'#/' + k} className={k === view ? 'tab tab-on' : 'tab'} aria-current={k === view ? 'page' : undefined}>{text}</a>
+        ))}
+      </nav>
+      {view === 'dashboard' && <Dashboard go={go} />}
+      {view === 'tickets' && <Tickets />}
+      {view === 'payments' && <Payments />}
+      {view === 'auctions' && <Auctions />}
+      {view === 'approvals' && <Approvals />}
+      {view === 'offers' && <Offers />}
+    </>
   );
 }
 

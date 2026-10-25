@@ -349,3 +349,9 @@ Defaults and recovery, write-off, ticket transfer and replacement exit. One migr
 ## Next: Phase 7 (not started)
 
 Group closure and the last cycle's leftover cash, after your review of Phase 6.
+
+## Customer portal reads (added for Customer Portal v2)
+
+`/api/v1/chit/customers/{customerId}/tickets|payments|requests|auctions` (read only, `chit.customer.portfolio.read`) and a `customerId` filter on `/api/v1/chit/dues`. Auction state is derived from the
+existing auction view (OPEN is LIVE, NOT_OPENED is UPCOMING, else CLOSED); the winning ticket and prize are shown only to the winner. Verified by 59 harness checks on PostgreSQL 16 (228 in all) and 273 unit tests.
+Not verified: the controller and Spring wiring over real HTTP.

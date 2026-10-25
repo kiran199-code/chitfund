@@ -116,9 +116,10 @@ public class CollectionController {
     @Operation(summary = "Dues across groups: view=UPCOMING (not yet raised, due within withinDays), OVERDUE (raised, past due) or OPEN (all raised and unpaid) (chit.demand.read)")
     public DuesPage dues(@RequestParam(value = "view", defaultValue = "OVERDUE") String view,
                          @RequestParam(value = "groupCode", required = false) String groupCode,
+                         @RequestParam(value = "customerId", required = false) Long customerId,
                          @RequestParam(value = "withinDays", defaultValue = "30") int withinDays,
                          @RequestParam(value = "limit", defaultValue = "100") int limit,
                          @RequestParam(value = "offset", defaultValue = "0") int offset) {
-        return reads.dues(view, groupCode, dates.today(), withinDays, limit, offset);
+        return reads.dues(view, groupCode, customerId, dates.today(), withinDays, limit, offset);
     }
 }

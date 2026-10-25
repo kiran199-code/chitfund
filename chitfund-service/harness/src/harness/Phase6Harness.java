@@ -45,6 +45,8 @@ public class Phase6Harness {
     static TransferReadService transferReads;
     static LedgerRepository ledgerRepo;
     static AuctionService auctions;
+    static AuctionReadService auctionReadSvc;
+    static CollectionReadService collectionReadSvc;
     static PayoutService payouts;
     static ChitSettings settings = new ChitSettings(500, true, false);
     static final WorkingDayCalendar ALL_DAYS = d -> true;
@@ -99,10 +101,12 @@ public class Phase6Harness {
         lateFees = new LateFeeWriter(groupSvc, coll, enrolRepo, ledger, audit);
         defaults = new DefaultWriter(groupSvc, coll, enrolRepo, audit);
         CollectionReadService collReads = new CollectionReadService(groupSvc, groupRepo, enrolRepo, coll);
+        collectionReadSvc = collReads;
         payments = new PaymentService(groupSvc, coll, enrolRepo, ledger, ledgerRepo, idem, audit, collReads);
         AuctionRepository auctionRepo = new AuctionRepository(jdbc);
         InternalPayments internal = new InternalPayments(coll, auctionRepo, ledger);
         AuctionReadService auctionReads = new AuctionReadService(groupSvc, auctionRepo, ledgerRepo);
+        auctionReadSvc = auctionReads;
         auctions = new AuctionService(groupSvc, auctionRepo, coll, ledger, idem, audit, internal, new DrawSeeds(), auctionReads);
         payouts = new PayoutService(groupSvc, auctionRepo, enrolRepo, ledger, idem, audit, settings, auctionReads, new CycleSettler(auctionRepo, audit));
         RecoveryRepository recRepo = new RecoveryRepository(jdbc);
@@ -192,6 +196,7 @@ public class Phase6Harness {
         if (only.isEmpty() || only.equals("prize")) Scenarios.prize();
         if (only.isEmpty() || only.equals("sample")) sampleGroups();
         if (only.isEmpty() || only.equals("customer")) customers();
+        if (only.isEmpty() || only.equals("portfolio")) PortfolioScenario.run();
         System.out.println("\n" + passed + " passed, " + failed + " failed (" + jdbc.statements + " statements)");
         jdbc.close();
         System.exit(failed == 0 ? 0 : 1);

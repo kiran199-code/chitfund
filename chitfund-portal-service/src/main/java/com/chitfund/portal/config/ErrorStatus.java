@@ -34,6 +34,8 @@ public final class ErrorStatus {
             Map.entry("EMAIL_CUSTOMER_MISMATCH", 409),
             Map.entry("CUSTOMER_EMAIL_TAKEN", 409),
             Map.entry("CUSTOMER_UNKNOWN", 404),
+            Map.entry("NOT_A_CUSTOMER", 403),
+            Map.entry("BID_NOT_ALLOWED", 409),
             Map.entry("TOO_MANY_REQUESTS", 429),
             Map.entry("CHIT_SERVICE_UNAVAILABLE", 502),
             Map.entry("SIGN_IN_NOT_CONFIGURED", 503));

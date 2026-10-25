@@ -39,3 +39,4 @@ chit.writeoff.request|Request a write-off of what a defaulted ticket still owes 
 chit.writeoff.approve|Approve or reject a write-off (checker; must differ from the requester while CHIT_MAKER_CHECKER_ENFORCE is true)|HIGH
 chit.customer.resolve|Find the customer for an e-mail address, or create one (attaches the e-mail to an existing customer id when given)|MEDIUM
 chit.customer.read|Look up customers by e-mail or id|LOW
+chit.customer.portfolio.read|One customer's tickets, payments, requests and auctions across groups (customer portal)|LOW
