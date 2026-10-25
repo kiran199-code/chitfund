@@ -91,7 +91,7 @@ class PortalInviteControllerTest {
         assertThat(portal.last().path()).isEqualTo("/groups/G1/invitations/7/revoke");
         controller.list("G1", "PENDING");
         assertThat(portal.last().method()).isEqualTo(HttpMethod.GET);
-        assertThat(portal.last().query()).containsEntry("status", "PENDING");
+        assertThat(portal.last().query().get("status")).isEqualTo("PENDING");
         assertThatThrownBy(() -> controller.list("G1", "pending; drop")).isInstanceOf(IllegalArgumentException.class);
     }
 }
