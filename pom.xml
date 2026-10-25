@@ -20,5 +20,6 @@
         <module>chitfund-service</module>
         <module>chitfund-batch-service</module>
         <module>chitfund-admin-service</module>
+        <module>chitfund-portal-service</module>
     </modules>
 </project>
