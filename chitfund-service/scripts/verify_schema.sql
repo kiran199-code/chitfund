@@ -1,4 +1,4 @@
--- Behavioural check of the chit schema (V1 to V6). Run against a scratch database after Flyway has migrated it:
+-- Behavioural check of the chit schema (V1 to V7). Run against a scratch database after Flyway has migrated it:
 --   psql -v ON_ERROR_STOP=1 -d <db> -f scripts/verify_schema.sql
 -- Every "must fail" statement is run inside a sub-block; if it succeeds the script stops with a message.
 -- Everything is rolled back at the end, so it leaves no data behind. Do not run against a database holding real data.
@@ -260,6 +260,68 @@ SELECT pg_temp.must_fail('more recovered than was covered',
   $$UPDATE chit_foreman_cover SET recovered_amount = 100.01$$);
 SELECT pg_temp.must_pass('recovered in full',
   $$UPDATE chit_foreman_cover SET recovered_amount = 100, status='RECOVERED'$$);
+
+-- V7: transfers, recovery, write-off ---------------------------------------------------------------------------------------
+INSERT INTO chit_ticket_transfer(ticket_id,from_customer_id,to_customer_id,made_by,requested_on)
+  SELECT t.id,t.customer_id,777,'maker','2026-11-07' FROM chit_ticket t JOIN chit_group g ON g.id=t.group_id WHERE g.group_code='G1' AND t.ticket_no=2;
+SELECT pg_temp.must_fail('a second pending transfer on one ticket',
+  $$INSERT INTO chit_ticket_transfer(ticket_id,from_customer_id,to_customer_id,made_by,requested_on) SELECT ticket_id,from_customer_id,778,'maker','2026-11-07' FROM chit_ticket_transfer$$);
+SELECT pg_temp.must_fail('a transfer kind that is not known',
+  $$UPDATE chit_ticket_transfer SET kind='GIFT'$$);
+SELECT pg_temp.must_fail('a fee on a replacement exit',
+  $$UPDATE chit_ticket_transfer SET kind='REPLACEMENT', fee_amount=250$$);
+SELECT pg_temp.must_fail('a previous status that cannot be restored',
+  $$UPDATE chit_ticket_transfer SET previous_status='EXITED'$$);
+SELECT pg_temp.must_fail('approved without an effective date',
+  $$UPDATE chit_ticket_transfer SET status='APPROVED', checked_by='checker'$$);
+SELECT pg_temp.must_fail('decided with no checker',
+  $$UPDATE chit_ticket_transfer SET status='APPROVED', effective_on='2026-11-07'$$);
+SELECT pg_temp.must_pass('same person as maker and checker (the service enforces this from CHIT_MAKER_CHECKER_ENFORCE)',
+  $$UPDATE chit_ticket_transfer SET status='APPROVED', checked_by='maker', effective_on='2026-11-07'$$);
+
+INSERT INTO chit_demand(demand_ref,cycle_id,ticket_id,due_date,raised_on,subscription_amount,late_fee_accrued)
+  SELECT 'D-W',c.id,t.id,c.due_date,c.due_date,10000,100 FROM chit_cycle c, chit_ticket t, chit_group g
+   WHERE c.cycle_no=2 AND g.id=c.group_id AND g.group_code='G1' AND t.group_id=g.id AND t.ticket_no=2;
+SELECT pg_temp.must_fail('a fee waived and paid above what accrued',
+  $$UPDATE chit_demand SET late_fee_paid=60, late_fee_waived=60 WHERE demand_ref='D-W'$$);
+SELECT pg_temp.must_fail('written off while the subscription is still owed',
+  $$UPDATE chit_demand SET status='WRITTEN_OFF', late_fee_waived=100 WHERE demand_ref='D-W'$$);
+SELECT pg_temp.must_fail('written off with nothing waived',
+  $$UPDATE chit_demand SET status='WRITTEN_OFF', subscription_paid=10000 WHERE demand_ref='D-W'$$);
+SELECT pg_temp.must_pass('written off: subscription paid by the foreman, fee waived',
+  $$UPDATE chit_demand SET status='WRITTEN_OFF', subscription_paid=10000, late_fee_waived=100 WHERE demand_ref='D-W'$$);
+
+INSERT INTO chit_default_case(ticket_id,opened_on) SELECT t.id,'2026-11-07' FROM chit_ticket t JOIN chit_group g ON g.id=t.group_id WHERE g.group_code='G1' AND t.ticket_no=2;
+SELECT pg_temp.must_fail('security applied below zero',
+  $$UPDATE chit_default_case SET security_applied=-1$$);
+SELECT pg_temp.must_pass('write-off with the same maker and checker (service-enforced)',
+  $$UPDATE chit_default_case SET written_off_amount=100, writeoff_made_by='m', writeoff_checked_by='m'$$);
+
+SELECT pg_temp.must_pass('a recovery action applying the deposit',
+  $$INSERT INTO chit_recovery_action(case_id,ticket_id,kind,arrears_amount,guarantee_amount,business_date,created_by) SELECT c.id,c.ticket_id,'SECURITY_APPLIED',60,40,'2026-11-08','t' FROM chit_default_case c$$);
+SELECT pg_temp.must_pass('a cover repayment with no default case',
+  $$INSERT INTO chit_recovery_action(case_id,ticket_id,kind,guarantee_amount,business_date,created_by) SELECT NULL,c.ticket_id,'COVER_REPAID',10,'2026-11-08','t' FROM chit_default_case c$$);
+SELECT pg_temp.must_fail('a recovery action of an unknown kind',
+  $$INSERT INTO chit_recovery_action(case_id,ticket_id,kind,arrears_amount,business_date,created_by) SELECT c.id,c.ticket_id,'GIFT',1,'2026-11-08','t' FROM chit_default_case c$$);
+SELECT pg_temp.must_fail('a recovery action of nothing',
+  $$INSERT INTO chit_recovery_action(case_id,ticket_id,kind,business_date,created_by) SELECT c.id,c.ticket_id,'SECURITY_APPLIED','2026-11-08','t' FROM chit_default_case c$$);
+SELECT pg_temp.must_fail('a cover repayment that pays arrears',
+  $$INSERT INTO chit_recovery_action(case_id,ticket_id,kind,arrears_amount,guarantee_amount,business_date,created_by) SELECT c.id,c.ticket_id,'COVER_REPAID',5,5,'2026-11-08','t' FROM chit_default_case c$$);
+SELECT pg_temp.must_fail('security applied with no case',
+  $$INSERT INTO chit_recovery_action(case_id,ticket_id,kind,arrears_amount,business_date,created_by) SELECT NULL,c.ticket_id,'SECURITY_APPLIED',5,'2026-11-08','t' FROM chit_default_case c$$);
+
+SELECT pg_temp.must_pass('a pending write-off',
+  $$INSERT INTO chit_write_off(case_id,ticket_id,subscription_amount,cover_amount,fee_amount,reason,made_by,requested_on) SELECT c.id,c.ticket_id,100,0,0,'r','maker','2026-11-08' FROM chit_default_case c$$);
+SELECT pg_temp.must_fail('a second pending write-off on the case',
+  $$INSERT INTO chit_write_off(case_id,ticket_id,subscription_amount,reason,made_by,requested_on) SELECT case_id,ticket_id,1,'r','maker','2026-11-08' FROM chit_write_off$$);
+SELECT pg_temp.must_fail('a write-off of nothing',
+  $$INSERT INTO chit_write_off(case_id,ticket_id,status,checked_by,decided_on,reason,made_by,requested_on) SELECT case_id,ticket_id,'REJECTED','c','2026-11-08','r','maker','2026-11-08' FROM chit_write_off$$);
+SELECT pg_temp.must_fail('approved without a checker',
+  $$UPDATE chit_write_off SET status='APPROVED'$$);
+SELECT pg_temp.must_pass('approved with a checker and a date',
+  $$UPDATE chit_write_off SET status='APPROVED', checked_by='checker', decided_on='2026-11-08'$$);
+SELECT pg_temp.must_pass('a new pending write-off once the first is decided',
+  $$INSERT INTO chit_write_off(case_id,ticket_id,subscription_amount,reason,made_by,requested_on) SELECT case_id,ticket_id,1,'r','maker','2026-11-09' FROM chit_write_off$$);
 
 ROLLBACK;
 \echo 'schema verification finished: every rule above was exercised'

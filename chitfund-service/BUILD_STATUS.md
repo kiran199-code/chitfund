@@ -1,7 +1,7 @@
 # chitfund-service: build status
 
 Chit fund microservice, now a standalone project (`chitfund`) with its own batch service and admin console. Built in phases from `docs/Chit_Fund_Specification_Prompt_v2.md`.
-Last updated 24 Oct 2026. **Phases 1 to 4 of 10 are built, and the chit fund has been split out of the lending platform (see "The split from lending" below). Phases 5 to 10 are not started.** Phases 1 to 4 were written inside the lending repository as `lending-chit-service`; this document keeps those sections as written, so wording such as "lending-service" or "lending-batch-service" in Phases 0 to 4 describes how it was built then. Where it differs from today, "The split from lending" is the current truth.
+Last updated 25 Oct 2026. **Phases 1 to 6 of 10 are built, and the chit fund has been split out of the lending platform (see "The split from lending" below). Phases 7 to 10 are not started.** Phases 1 to 4 were written inside the lending repository as `lending-chit-service`; this document keeps those sections as written, so wording such as "lending-service" or "lending-batch-service" in Phases 0 to 4 describes how it was built then. Where it differs from today, "The split from lending" is the current truth.
 
 ## The split from lending
 
@@ -46,8 +46,8 @@ Not changed: the API root `/api/v1/chit`, the ledger, the rules, and every migra
 
 1. Is `TRANSFERRED` as a transient state right, or do you want the old ticket record closed and a new one opened?
 2. With `NON_PRIZED_ONLY`, does the winner of the current cycle share that cycle's dividend? (The calculator takes the list of beneficiaries from the caller, so either works; the service must choose.)
-3. Exit of a non-prized ticket: refund paid contributions less penalty, or require a replacement subscriber? The journal for it waits for this answer (Phase 6).
-4. When the pool bears the loss of a write-off, who absorbs it (reduce later dividends, or the foreman)? Needed for the Phase 6 journals.
+3. Exit of a non-prized ticket: refund paid contributions less penalty, or require a replacement subscriber? **Answered 25 Oct: find a replacement subscriber; no refund** (built in Phase 6).
+4. When the pool bears the loss of a write-off, who absorbs it (reduce later dividends, or the foreman)? **Answered 25 Oct: for now the foreman** (built in Phase 6).
 5. Late fees on calendar days is assumed. Business days instead?
 6. Is a strict `cycleCount = ticketCount` acceptable, or do you want shorter or longer terms?
 
@@ -309,6 +309,43 @@ With every member paying, the pool's cash always equals what it owes (prize + co
 - **Controllers, wiring, JSON binding: compiled only,** as before. The new controller has not served a request. The admin forwarding has unit tests (48 in the admin service).
 - **Not done:** `mvn` build, real JUnit run, Spring startup, Flyway through Spring, `@Transactional` proxies (the harness wraps calls by hand), Docker build, `ChitApplicationIT` (not extended), the live Render deployment, and your review. Note also that nothing yet closes a group or moves the last cycle's leftover cash (Phase 7).
 
-## Next: Phase 6 (not started)
+## Phase 6: what is built
 
-Transfers, defaults, recovery and write-off (including recovering a foreman cover from the ticket). Questions 3 and 4 from Phase 0 are still open and are needed there.
+Defaults and recovery, write-off, ticket transfer and replacement exit. One migration (V7), new `transfer` and `recovery` packages, two pure calculators, 40 tests added (261 in all).
+
+| Area | What | Notes |
+|---|---|---|
+| Schema | `V7__chit_recovery_transfer.sql` | Transfers gain kind (`TRANSFER` or `REPLACEMENT`), reasons, previous status, dates and the new holder's payout account; demands gain `late_fee_waived` and status `WRITTEN_OFF` (the status column is widened to 12); default cases gain `security_applied` and `cover_recovered`; new `chit_recovery_action` and `chit_write_off`. The two database CHECKs that hard-wired maker is not checker (transfer and write-off) are **dropped**: the service enforces them from `CHIT_MAKER_CHECKER_ENFORCE`, as for payouts since V6. |
+| Transfer | `TransferService`, `TransferEligibility` | A transfer hands the same ticket to another customer. Request by a maker, approval by a different checker. While pending an ACTIVE or PRIZED ticket shows `TRANSFERRED`; a DEFAULTED ticket stays DEFAULTED. Approval closes the old subscriber link, opens a new one, changes the holder, restores the status and posts the transfer fee. A rejection restores the status exactly. |
+| Replacement exit | `TransferService.requestExit` | Your answer to question 3. An ACTIVE ticket that has not won leaves by naming a replacement who takes the same ticket (link reason `REPLACEMENT`). No refund, no penalty, no fee. A prize winner is refused (`EXIT_PRIZED_TICKET`); a winner can be transferred instead. |
+| Fee | rule `transferFee` (default 0) | Paid by the incoming holder on a plain transfer, never on a replacement exit. Journal `TRANSFERFEE:<id>`: Dr foreman cash, Cr `TRANSFER_FEE_INCOME`. Old snapshots without the field still load. |
+| Arrears | `TransferEligibility` | Nothing overdue (instalments, late fees) and nothing owed to the foreman on covers, otherwise `TRANSFER_ARREARS_EXIST`. This **replaces** the "arrears travel with the ticket" wording of Option A under "Decisions you gave", at your 25 Oct answer: arrears are cleared (or written off) before the ticket changes hands. Security stays with the ticket. |
+| Apply security | `RecoveryService.applySecurity` | For a DEFAULTED ticket with an open case. The held deposit pays overdue demands first (in the group's allocation order, as an INTERNAL payment `SECAPPLY:<action>`), then the foreman's covers, oldest first (`SECGUAR:<action>:<cover>`). Amount optional (a cap). When the deposit reaches zero the security row becomes APPLIED. If the ticket then owes nothing it returns to good standing and the case closes RECOVERED. |
+| Repay a cover | `RecoveryService.repayCover` | Money the holder pays the foreman against a cover; not a payment into the pool (`GUARREPAY:<action>:<cover>`). Works with no open case. Refuses more than is owed (`COVER_REPAYMENT_TOO_LARGE`). |
+| Write-off | `RecoveryService.requestWriteOff` / `approveWriteOff` | Your answer to question 4. Allowed only when `foremanGuaranteeMode` is not `NONE`, the ticket is DEFAULTED, the deposit has been applied (`SECURITY_STILL_HELD` otherwise) and something is owed. The request stores a snapshot; the checker approves only if it is still true (`WRITE_OFF_STALE`). On approval the foreman pays each overdue subscription into the pool as a cover, overdue late fees are waived (`LFWAIVE:<demand>`), and every open cover is written off to `GUARANTEE_LOSS_EXPENSE` (`GWO:<cover>`). A demand ends WRITTEN_OFF only when a fee was waived; otherwise PAID. |
+| After a write-off | `TransferService.approve` | The ticket stays DEFAULTED and the case OPEN until a replacement subscriber takes it by a **transfer**; approval then returns it to ACTIVE and closes the case WRITTEN_OFF. |
+| Errors | 409 `RECOVERY_TICKET_NOT_DEFAULTED`, `RECOVERY_NO_OPEN_CASE`, `COVER_REPAYMENT_TOO_LARGE`, `WRITE_OFF_PENDING`, `WRITE_OFF_STALE`, `WRITE_OFF_DEMAND_ALREADY_COVERED`, `SECURITY_STILL_HELD`, `TRANSFER_PENDING`, `TRANSFER_PAYOUT_PENDING`, `TRANSFER_TICKET_NOT_ELIGIBLE`, `EXIT_PRIZED_TICKET`; 403 `MAKER_CHECKER_VIOLATION`; 422 `NO_SECURITY_HELD`, `NOTHING_TO_RECOVER`, `NOTHING_TO_WRITE_OFF`, `WRITE_OFF_NOT_PERMITTED`, `TRANSFER_ARREARS_EXIST`, `TRANSFER_SAME_CUSTOMER`, `TRANSFER_GUARANTOR_CONFLICT` | |
+| Endpoints | transfer: `POST /groups/{code}/tickets/{no}/transfer`, `.../exit`, `GET .../transfers`, `.../transfers/{id}`, `.../tickets/{no}/transfers`, `POST .../transfers/{id}/approve\|reject`. recovery: `GET .../tickets/{no}/recovery`, `POST .../recovery/apply-security`, `.../recovery/repay-cover`, `.../recovery/write-offs`, `GET .../write-offs[/{id}]`, `POST .../write-offs/{id}/approve\|reject` | All mutating calls need `Idempotency-Key` and `X-Actor`. |
+| Permissions | 7 new codes in `IAM_PERMISSIONS.txt` | `chit.transfer.read\|request\|approve`, `chit.recovery.read\|apply`, `chit.writeoff.request\|approve` |
+
+### New assumptions and limitations for you to confirm or change
+
+1. **A group with `foremanGuaranteeMode` NONE cannot write off**, and its rules are frozen once active, so a defaulted ticket there can only be recovered (deposit, payment) or transferred once cleared. Relax the rule or tell me if you want write-off allowed there too.
+2. **Only a held DEPOSIT goes through the books.** A LIEN or a GUARANTOR claim is made outside the system and the money received is recorded as an ordinary payment on the ticket (`NO_SECURITY_HELD` explains this).
+3. **Write-off needs an open default case.**
+4. **The incoming holder in a replacement after a write-off pays the transfer fee**, because that path is a plain transfer (a replacement *exit* is only for ACTIVE tickets). If you want it free, the fee can be waived for a ticket whose case was written off.
+5. **Unpaid dividends and advance travel with the ticket** on transfer.
+6. **`PaymentService.cureIfClear` is unchanged:** a case with `foreman_covered > 0` is never cured by ordinary payments; use apply-security or repay-cover.
+7. **After an APPLIED deposit** the payout precondition `PAYOUT_SECURITY_NOT_VERIFIED` would block that ticket's later prize until security is posted again.
+8. **A transfer also needs the group ACTIVE or CLOSING**; before activation a member withdraws and the seat is enrolled again.
+
+## Phase 6: how it was checked, and what was not
+
+- **Pure code: checked.** 261 tests pass under the stand-in runner (221 earlier + 40): the recovery waterfall, transfer eligibility in its stated order, the new journals, the `transferFee` rule and its JSON, the V7 schema against the code, the new error statuses.
+- **Database: checked.** V1 to V7 apply on PostgreSQL 16; `scripts/verify_schema.sql` now runs 104 checks (25 for V7).
+- **Services against a real database: checked, with limits.** A sandbox harness (`harness/`, 125 checks, all passing) runs the real services over PostgreSQL 16 with hand-driven transactions: transfer with a fee, a refused self-approval, replay, rejection, same-customer and arrears refusals, a replacement exit with no fee, a prize winner refused for exit and held back by `TRANSFER_PAYOUT_PENDING` until paid, applying a deposit to arrears and to auction covers, repaying covers (and refusing too much), write-off with and without a late fee, a stale snapshot refused, replay of an approval, mode NONE refused, and a replacement closing the case WRITTEN_OFF. After each step the trial balance is in balance and each ticket's receivable equals what its demands say. **It found one defect** (the demand status column was too short for `WRITTEN_OFF`), fixed in V7.
+- **Not done:** the admin service and screens for Phase 6 (the Phase 5 pattern, not started), `mvn` build, real JUnit run, Spring startup, controllers and JSON binding (compiled only), `@Transactional` proxies (the harness wraps calls by hand), Flyway through Spring, `ChitApplicationIT` (not extended), the live deployment, and your review.
+
+## Next: Phase 7 (not started)
+
+Group closure and the last cycle's leftover cash, after your review of Phase 6.
