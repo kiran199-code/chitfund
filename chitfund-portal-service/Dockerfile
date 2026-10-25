@@ -1,12 +1,22 @@
-# --- Build stage -------------------------------------------------------------------
+# Build context: this directory (chitfund-portal-service/).
+# --- 1. Customer web app (React) ---------------------------------------------------
+FROM node:20-alpine AS ui
+WORKDIR /ui
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm install --no-audit --no-fund
+COPY frontend/ ./
+RUN npm run build
+
+# --- 2. Spring Boot jar, with the built app served from classpath:/static ----------
 FROM maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /build
 COPY pom.xml .
 RUN mvn -B -q dependency:go-offline
 COPY src ./src
+COPY --from=ui /ui/dist ./src/main/resources/static
 RUN mvn -B -q clean package -DskipTests
 
-# --- Runtime stage -------------------------------------------------------------------
+# --- 3. Runtime ----------------------------------------------------------------------
 FROM eclipse-temurin:17-jre-alpine
 RUN addgroup -S app && adduser -S app -G app
 WORKDIR /app

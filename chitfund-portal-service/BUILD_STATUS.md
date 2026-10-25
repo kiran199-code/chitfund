@@ -5,6 +5,15 @@ Customer-facing portal back end. Separate Spring Boot service (port 8087, Java 1
 
 ## What is built
 
+**Customer web app (added after Steps 1 and 2).** A small React app in `frontend/`, built into the jar by the Dockerfile and served by this service
+itself (so the session cookie is same-origin). Pages: sign-in with the Google button; `/invite/<token>` (sign in, then review the group and decline);
+a signed-in home page; sign out. "Accept and join" is shown but disabled until Step 3. The page reads the Google client id from
+`GET /api/v1/portal/config` at runtime. Checked: `tsc` clean and `vite build` succeeds. NOT checked: never opened in a browser, never run against
+real Google, the Docker build of the UI stage, and the forward from `/invite/<token>` to the app (`SpaController`).
+
+To use it on Render: set `PORTAL_BASE_URL` and `PORTAL_ALLOWED_ORIGINS` to this service's own https address (no trailing slash), and add that
+address under "Authorized JavaScript origins" on the Google OAuth client.
+
 - **Step 1, invitations.** Admin invites a batch by email (up to 200), lists, resends and revokes. 256-bit link token, only its SHA-256 hash is
   stored. Statuses PENDING, ACCEPTED_AWAITING_PAYMENT, ACCEPTED, DECLINED, EXPIRED, REVOKED; expiry is evaluated lazily and swept by a scheduler.
   One live invitation per group and address. Batch invite is idempotent (`Idempotency-Key`). Mail goes through a transactional outbox with
