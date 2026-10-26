@@ -14,17 +14,12 @@ real Google, the Docker build of the UI stage, and the forward from `/invite/<to
 To use it on Render: set `PORTAL_BASE_URL` and `PORTAL_ALLOWED_ORIGINS` to this service's own https address (no trailing slash), and add that
 address under "Authorized JavaScript origins" on the Google OAuth client.
 
-- **Step 1, invitations.** Admin invites a batch by email (up to 200), lists, resends and revokes. 256-bit link token, only its SHA-256 hash is
-  stored. Statuses PENDING, ACCEPTED_AWAITING_PAYMENT, ACCEPTED, DECLINED, EXPIRED, REVOKED; expiry is evaluated lazily and swept by a scheduler.
-  One live invitation per group and address. Batch invite is idempotent (`Idempotency-Key`). Mail goes through a transactional outbox with
-  retry (1 min, 5 min, 30 min, 2 h, 6 h; give-up after `max-attempts`, shown to the admin as SEND_FAILED).
+- **Step 1, invitations: removed.** Members now register themselves and request seats (see Seat requests below). The old invitation and mail-outbox tables stay in the database, unused, so no data is dropped.
 - **Step 2, Google sign-in and sessions.** The browser sends the Google ID token; the server verifies it, then issues its own random session
   token (hash stored, HttpOnly cookie). No passwords anywhere. Every POST needs `X-Portal-Client: web` and an allowed Origin. Rate limiting on sign-in.
-  The invitee can view and decline an invitation, only from the Google account whose address it was sent to.
-- Console mail sender by default; SMTP sender selected with `CHIT_PORTAL_MAIL_MODE=SMTP` and the usual mail environment variables.
+- The portal sends no e-mail any more; the mail settings and starter are removed.
 
-API: admin `POST/GET /api/v1/portal/admin/groups/{code}/invitations`, `POST .../{id}/resend`, `POST .../{id}/revoke` (HTTP Basic);
-member `POST /api/v1/portal/auth/google`, `POST /auth/logout`, `GET /me`, `GET /invitations/{token}`, `POST /invitations/{token}/decline`.
+API: member `POST /api/v1/portal/auth/google`, `POST /auth/logout`, `GET /me`; plans, join requests and offers as described below.
 
 ## How it was checked (and what that does and does not prove)
 
@@ -143,3 +138,15 @@ Each plan card shows a photo for its type, taken from the six Unsplash links in 
 They are hot-linked, so visitors' browsers contact images.unsplash.com. If a photo fails to load, the card shows a dark backdrop with the category icon.
 NOT verified: that the six links load or show what the file's author intended (the sandbox and the device could not reach Unsplash; layout was checked with stand-in images).
 To serve them from the portal instead, save six files under frontend/public/plans/ and point PLAN_PHOTO at /plans/<type>.jpg.
+
+## Dark portal look (Oct 2026)
+Whole web app restyled to match the supplied honest_savers_portal.html: near-black pages, slate cards, crimson actions, gold figures, Inter font, header with pill nav, profile chip and Sign out, mobile drawer instead of the bottom tab bar, category bar with captions, 3-column photo plan grid, Request Seat modal and toast.
+Left out on purpose: its "Govt Regulated", "RBI & State Registrar Compliant", "Registered under Chit Funds Act" and "Verified Member" labels (unverifiable claims) and its sample data. Tagline kept as "Honest dealings. Happy savers."
+Verified: typecheck, build, screenshots at phone and desktop width with a mocked API and stand-in photos. NOT verified: the real Unsplash photos, the Inter font in a real browser.
+
+## Seat requests (join requests) and plan listing
+- chitfund-service: GET /api/v1/chit/plans/open and PUT /api/v1/chit/groups/{code}/listing (category, branch, state).
+- chitfund-portal-service: V5 migration (portal_join_request), public plans list, member join requests, admin approve/decline. Approving records the decision only; staff enrol through the normal steps.
+- chitfund-admin-service: "Seat requests" screen, a listing card on the group page (DRAFT and OPEN_FOR_ENROLMENT); invitation screens and controller removed.
+- Not compiled in the build sandbox: the admin Java (no Maven Central there). Run `mvn test` on the device before deploying.
+- Deploy order: chitfund-service, then chitfund-portal-service, then chitfund-admin-service.

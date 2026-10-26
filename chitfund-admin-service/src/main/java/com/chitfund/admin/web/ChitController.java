@@ -2,11 +2,13 @@ package com.chitfund.admin.web;
 
 import com.chitfund.admin.service.ChitClient;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.springframework.http.HttpMethod;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -88,6 +90,15 @@ public class ChitController {
     @GetMapping("/groups/{code}")
     public JsonNode group(@PathVariable String code) {
         return client.get("/groups/" + code(code, "code"), Map.of());
+    }
+
+    @Operation(summary = "How the group is listed on the customer portal",
+            description = "Body {planCategory?, branch?, state?}. Category is one of EDUCATION, HOME, WEDDING, SHORT_TERM, RETIREMENT, BUSINESS; empty values clear a field. A group without a category shows only under All Plans.")
+    @PutMapping("/groups/{code}/listing")
+    public JsonNode setListing(@PathVariable String code, @RequestBody JsonNode body,
+                               @RequestHeader(value = "X-Acting-As", required = false) String acting, Principal user) {
+        object(body);
+        return client.exchange(HttpMethod.PUT, "/groups/" + code(code, "code") + "/listing", Map.of(), body, actor(acting, user), null);
     }
 
     @Operation(summary = "The group's current rules")

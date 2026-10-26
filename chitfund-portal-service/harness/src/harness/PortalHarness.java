@@ -6,11 +6,9 @@ import com.chitfund.portal.chit.ChitEnrolmentGateway;
 import com.chitfund.portal.chit.ChitGroupGateway;
 import com.chitfund.portal.chit.GroupSummary;
 import com.chitfund.portal.common.Audit;
+import com.chitfund.portal.common.Emails;
 import com.chitfund.portal.common.PortalException;
 import com.chitfund.portal.idempotency.IdempotencyStore;
-import com.chitfund.portal.invite.*;
-import com.chitfund.portal.invite.InviteDtos.*;
-import com.chitfund.portal.mail.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
@@ -24,16 +22,13 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Runs the portal's real services (invites, outbox, sign-in, invitee view) against a real PostgreSQL with the real V1 migration.
- * Not Spring: no controllers, no proxies, no security filter. Google and chitfund-service are replaced by fakes; the mail gateway captures.
+ * Runs the portal's real services (sign-in, sessions, offers, site text, seat requests) against a real PostgreSQL with the real migrations.
+ * Not Spring: no controllers, no proxies, no security filter. Google and chitfund-service are replaced by fakes.
  */
 public class PortalHarness {
 
     static PgJdbcTemplate jdbc;
-    static InvitationService invites;
-    static OutboxService outbox;
     static PortalAuthService auth;
-    static PortalInviteService invitee;
     static MemberRepository members;
 
     static final Map<String, GroupSummary> GROUPS = new HashMap<>();
@@ -44,13 +39,10 @@ public class PortalHarness {
     static final List<ChitEnrolmentGateway.Received> RECEIVED = new ArrayList<>();
     static int enrolCalls = 0, nextTicket = 1;
     static long nextCustomer = 5000;
-    static final List<OutgoingMail> SENT = new ArrayList<>();
-    static boolean mailDown = false;
     static boolean customersDown = false;
     static final Map<String, GoogleIdentity> TOKENS = new HashMap<>();
 
     static final OffsetDateTime T0 = OffsetDateTime.of(2026, 11, 1, 10, 0, 0, 0, ZoneOffset.UTC);
-    static final Pattern TOKEN = Pattern.compile("/invite/([A-Za-z0-9_-]{43})");
     static int passed, failed;
     static long keySeq = 1;
 
@@ -126,17 +118,10 @@ public class PortalHarness {
         Audit audit = new Audit(jdbc);
         IdempotencyStore idem = new IdempotencyStore(jdbc);
         ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
-        MailGateway gw = mail -> {
-            if (mailDown) throw new IllegalStateException("smtp down");
-            SENT.add(mail);
-            return "msg-" + SENT.size();
-        };
-        outbox = new OutboxService(new OutboxRepository(jdbc), gw, 3);
         ChitGroupGateway groups = code -> {
             if ("DOWN".equals(code)) throw new PortalException("CHIT_SERVICE_UNAVAILABLE", "chitfund-service unreachable");
             return Optional.ofNullable(GROUPS.get(code));
         };
-        InvitationRepository invRepo = new InvitationRepository(jdbc);
         ChitEnrolmentGateway chit = new ChitEnrolmentGateway() {
             public Quote quote(String groupCode) {
                 return QUOTES.getOrDefault(groupCode, new Quote(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, false, BigDecimal.ZERO));
@@ -169,8 +154,6 @@ public class PortalHarness {
                 return TICKETS.computeIfAbsent(key, k -> nextTicket++);
             }
         };
-        EnrolmentFlow flow = new EnrolmentFlow(invRepo, groups, chit, audit);
-        invites = new InvitationService(invRepo, groups, chit, flow, outbox, idem, audit, mapper, "https://portal.example", 7, 200, 5, "Asia/Kolkata");
         members = new MemberRepository(jdbc);
         GoogleIdentityVerifier verifier = (idToken, now) -> {
             GoogleIdentity g = TOKENS.get(idToken);
@@ -178,7 +161,6 @@ public class PortalHarness {
             return g;
         };
         auth = new PortalAuthService(verifier, members, new SessionRepository(jdbc), audit, 8);
-        invitee = new PortalInviteService(invRepo, groups, chit, flow, audit);
         group("G1", "OPEN_FOR_ENROLMENT", 5);
         group("G-FULL", "OPEN_FOR_ENROLMENT", 0);
         group("G-ACTIVE", "ACTIVE", 3);
@@ -187,17 +169,6 @@ public class PortalHarness {
     static void group(String code, String status, int seatsLeft) {
         GROUPS.put(code, new GroupSummary(code, "Group " + code, status, new BigDecimal("100000.00"), 20, 20, new BigDecimal("5000.00"),
                 LocalDate.of(2026, 12, 1), seatsLeft));
-    }
-
-    static String tokenFrom(OutgoingMail m) {
-        Matcher x = TOKEN.matcher(m.text());
-        if (!x.find()) throw new IllegalStateException("no link in mail to " + m.to());
-        return x.group(1);
-    }
-
-    static OutgoingMail lastMailTo(String email) {
-        for (int i = SENT.size() - 1; i >= 0; i--) if (SENT.get(i).to().equals(email)) return SENT.get(i);
-        throw new IllegalStateException("no mail sent to " + email);
     }
 
     static String idToken(String sub, String email, String name) {
@@ -214,26 +185,81 @@ public class PortalHarness {
         return auth.resolve(signIn(sub, email, now).sessionToken(), now);
     }
 
-    static InviteView find(String code, String email, OffsetDateTime now) {
-        return invites.list(code, null, now).stream().filter(v -> v.email().equals(email)).findFirst().orElseThrow();
-    }
-
     // ---- entry ----
 
     public static void main(String[] args) throws Exception {
         wire();
         String only = args.length > 0 ? args[0] : "";
-        if (only.isEmpty() || only.equals("invite")) inviteBatch();
-        if (only.isEmpty() || only.equals("lifecycle")) lifecycle();
-        if (only.isEmpty() || only.equals("mail")) mail();
         if (only.isEmpty() || only.equals("auth")) authScenarios();
-        if (only.isEmpty() || only.equals("invitee")) inviteeScenarios();
-        if (only.isEmpty() || only.equals("enrol")) enrolmentScenarios();
         if (only.isEmpty() || only.equals("offers")) offerScenarios();
         if (only.isEmpty() || only.equals("site")) siteScenarios();
+        if (only.isEmpty() || only.equals("join")) joinScenarios();
         System.out.println("\n" + passed + " passed, " + failed + " failed (" + jdbc.statements + " statements)");
         jdbc.close();
         System.exit(failed == 0 ? 0 : 1);
+    }
+
+    // ---- join requests (real SQL, fake chitfund-service plans) ----
+
+    static void joinScenarios() {
+        System.out.println("== join requests: request, idempotent repeat, seats, withdraw, staff decision");
+        java.util.List<com.chitfund.portal.chit.ChitPlanGateway.OpenPlan> open = new java.util.ArrayList<>();
+        open.add(new com.chitfund.portal.chit.ChitPlanGateway.OpenPlan("TG-EDU-1", "Education Plan 10 lakh, Siddipet", "EDUCATION", "Siddipet", "Telangana", new BigDecimal("1000000"), 40, 40, new BigDecimal("25000"), "MONTHLY", LocalDate.of(2026, 12, 1), 12));
+        open.add(new com.chitfund.portal.chit.ChitPlanGateway.OpenPlan("TG-OLD-1", "Unlabelled", null, null, null, new BigDecimal("100000"), 10, 10, new BigDecimal("10000"), "MONTHLY", LocalDate.of(2026, 12, 1), 1));
+        open.add(new com.chitfund.portal.chit.ChitPlanGateway.OpenPlan("TG-FULL-1", "Full plan", "HOME", "Medak", "Telangana", new BigDecimal("100000"), 10, 10, new BigDecimal("10000"), "MONTHLY", LocalDate.of(2026, 12, 1), 0));
+        com.chitfund.portal.chit.ChitPlanGateway gw = () -> open;
+        java.time.Clock clock = java.time.Clock.fixed(T0.toInstant(), ZoneOffset.UTC);
+        var plans = new com.chitfund.portal.join.PlanService(gw, clock, 0);
+        var repo = new com.chitfund.portal.join.JoinRequestRepository(jdbc);
+        var svc = new com.chitfund.portal.join.JoinRequestService(repo, plans, new Audit(jdbc));
+
+        var shelf = plans.shelf();
+        eq("shelf lists open plans", 3, shelf.size());
+        eq("unlabelled plan has empty labels", java.util.List.of("", "", ""), java.util.List.of(shelf.get(1).category(), shelf.get(1).branch(), shelf.get(1).state()));
+        eq("shelf carries tickets and seats", java.util.List.of(40, 12, 40), java.util.List.of(shelf.get(0).tickets(), shelf.get(0).seatsLeft(), shelf.get(0).cycles()));
+
+        long m1 = tx(() -> members.insert("asha.join@example.com", "Asha Rao", "sub-join-1", T0));
+        long m2 = tx(() -> members.insert("ravi.join@example.com", "Ravi K", "sub-join-2", T0));
+        var asha = new SessionMember(m1, "asha.join@example.com", "Asha Rao");
+        var ravi = new SessionMember(m2, "ravi.join@example.com", "Ravi K");
+
+        var r1 = tx(() -> svc.request(asha, "TG-EDU-1", 2, "1.2.3.4"));
+        eq("new request is pending", java.util.List.of("PENDING", 2, "TG-EDU-1"), java.util.List.of(r1.status(), r1.tickets(), r1.groupCode()));
+        eq("group name is snapshotted", "Education Plan 10 lakh, Siddipet", r1.groupName());
+        var again = tx(() -> svc.request(asha, "TG-EDU-1", 1, "1.2.3.4"));
+        eq("asking again returns the same request", r1.id(), again.id());
+        eq("still one row", 1L, count("SELECT count(*) FROM portal_join_request WHERE member_id=" + m1));
+        refused("tickets out of range", "VALIDATION_FAILED", () -> svc.request(asha, "TG-OLD-1", 4, null), true);
+        refused("tickets missing", "VALIDATION_FAILED", () -> svc.request(asha, "TG-OLD-1", null, null), true);
+        refused("unknown plan", "PLAN_NOT_OPEN", () -> svc.request(asha, "NOPE", 1, null), true);
+        refused("full plan", "GROUP_FULL", () -> svc.request(asha, "TG-FULL-1", 1, null), true);
+        refused("more tickets than seats", "GROUP_FULL", () -> svc.request(asha, "TG-OLD-1", 2, null), true);
+        eq("other member can ask for the same plan", "PENDING", tx(() -> svc.request(ravi, "TG-EDU-1", 1, null)).status());
+        eq("each sees only their own", java.util.List.of(1, 1), java.util.List.of(svc.mine(asha).size(), svc.mine(ravi).size()));
+
+        refused("someone else cannot withdraw it", "NOT_FOUND", () -> svc.withdraw(ravi, r1.id(), null), true);
+        var w = tx(() -> svc.withdraw(asha, r1.id(), null));
+        eq("withdrawn", "WITHDRAWN", w.status());
+        refused("withdrawing twice", "JOIN_NOT_PENDING", () -> svc.withdraw(asha, r1.id(), null), true);
+        var r2 = tx(() -> svc.request(asha, "TG-EDU-1", 1, null));
+        check("a new request after withdrawing gets a new id", r2.id() != r1.id());
+
+        var pending = svc.list("PENDING");
+        eq("staff see both pending", 2, pending.size());
+        eq("staff see who asked", true, pending.stream().anyMatch(x -> x.email().equals("asha.join@example.com") && x.memberName().equals("Asha Rao")));
+        refused("bad status filter", "VALIDATION_FAILED", () -> svc.list("MAYBE"), true);
+        refused("decision needs an actor", "HEADER_REQUIRED", () -> svc.decide(r2.id(), true, null, " ", T0), true);
+        var ok = tx(() -> svc.decide(r2.id(), true, " Call on Monday ", "staff1", T0));
+        eq("approved with note", java.util.List.of("APPROVED", "Call on Monday", "staff1"), java.util.List.of(ok.status(), ok.note(), ok.decidedBy()));
+        refused("deciding twice", "JOIN_NOT_PENDING", () -> svc.decide(r2.id(), false, null, "staff2", T0), true);
+        refused("cannot withdraw an approved request", "JOIN_NOT_PENDING", () -> svc.withdraw(asha, r2.id(), null), true);
+        var ravisId = pending.stream().filter(x -> x.email().startsWith("ravi")).findFirst().orElseThrow().id();
+        eq("declined", "DECLINED", tx(() -> svc.decide(ravisId, false, "Group is for existing members", "staff1", T0)).status());
+        var again2 = tx(() -> svc.request(ravi, "TG-EDU-1", 1, null));
+        eq("after a decline a fresh request is allowed", "PENDING", again2.status());
+        refused("unknown request", "NOT_FOUND", () -> svc.decide(99999, true, null, "s", T0), true);
+        eq("by status", java.util.List.of(1, 1, 1, 1), java.util.List.of(svc.list("APPROVED").size(), svc.list("DECLINED").size(), svc.list("WITHDRAWN").size(), svc.list("PENDING").size()));
+        eq("audit rows written", true, count("SELECT count(*) FROM portal_audit WHERE entity_type='JOIN_REQUEST'") >= 7);
     }
 
     // ---- offers (real SQL) ----
@@ -288,147 +314,9 @@ public class PortalHarness {
 
     // ---- 1. a batch of invitations, replay, group rules ----
 
-    static void inviteBatch() {
-        System.out.println("== invite: batch, skipped reasons, replay, group rules");
-        InviteRequest req = new InviteRequest(List.of(
-                new Invitee("a@x.com", "Asha", 2),
-                new Invitee("  B@X.com ", null, null),
-                new Invitee("not-an-email", null, null),
-                new Invitee("a@x.com", null, null),
-                new Invitee("c@x.com", null, 9),
-                new Invitee("d@x.com", "D", 1)), null);
-        String k = key();
-        BatchResult r = tx(() -> invites.invite("G1", req, k, "admin1", "1.2.3.4", T0));
-        eq("created count", 3, r.created().size());
-        eq("skipped count", 3, r.skipped().size());
-        Set<String> codes = new TreeSet<>();
-        r.skipped().forEach(s -> codes.add(s.code()));
-        eq("skipped reasons", new TreeSet<>(List.of("INVALID_EMAIL", "DUPLICATE_IN_BATCH", "INVALID_TICKET_COUNT")), codes);
-        check("emails are normalised", r.created().stream().anyMatch(v -> v.email().equals("b@x.com")));
-        eq("not a replay", false, r.replayed());
-        eq("pending invites", 3, r.pendingInvites());
-        eq("mails queued, none sent yet", 3L, count("SELECT count(*) FROM portal_outbox WHERE status='PENDING'"));
-        eq("only hashes stored, no raw token column", 0L, count("SELECT count(*) FROM portal_invitation WHERE length(token_hash) <> 64"));
-
-        BatchResult again = tx(() -> invites.invite("G1", req, k, "admin1", "1.2.3.4", T0.plusMinutes(1)));
-        eq("same key and body replays", true, again.replayed());
-        eq("replay creates nothing", 3L, count("SELECT count(*) FROM portal_invitation"));
-        eq("replay queues nothing", 3L, count("SELECT count(*) FROM portal_outbox"));
-        refused("same key, different body", "IDEMPOTENCY_KEY_REUSED",
-                () -> invites.invite("G1", new InviteRequest(List.of(new Invitee("z@x.com", null, null)), null), k, "admin1", "1.2.3.4", T0));
-        refused("no key", "IDEMPOTENCY_KEY_REQUIRED", () -> invites.invite("G1", req, null, "admin1", "1.2.3.4", T0));
-
-        BatchResult dup = tx(() -> invites.invite("G1", new InviteRequest(List.of(new Invitee("A@x.com", null, null)), null), key(), "admin1", "ip", T0));
-        eq("already invited is skipped", "ALREADY_INVITED", dup.skipped().get(0).code());
-
-        refused("unknown group", "GROUP_NOT_FOUND", () -> invites.invite("NOPE", req, key(), "admin1", "ip", T0));
-        refused("group not open", "GROUP_NOT_OPEN", () -> invites.invite("G-ACTIVE", req, key(), "admin1", "ip", T0));
-        refused("group full", "GROUP_FULL", () -> invites.invite("G-FULL", req, key(), "admin1", "ip", T0));
-        refused("chitfund-service down", "CHIT_SERVICE_UNAVAILABLE", () -> invites.invite("DOWN", req, key(), "admin1", "ip", T0));
-        refused("empty list", "VALIDATION_FAILED", () -> invites.invite("G1", new InviteRequest(List.of(), null), key(), "admin1", "ip", T0));
-        refused("expiryDays 0", "VALIDATION_FAILED",
-                () -> invites.invite("G1", new InviteRequest(List.of(new Invitee("q@x.com", null, null)), 0), key(), "admin1", "ip", T0));
-        check("the failed calls left no half-written invitations", count("SELECT count(*) FROM portal_invitation") == 3);
-        check("invitation audit rows written", count("SELECT count(*) FROM portal_audit WHERE action='INVITED'") == 3);
-    }
-
     // ---- 2. resend, revoke, expiry ----
 
-    static void lifecycle() {
-        System.out.println("== lifecycle: dispatch, resend, revoke, expiry");
-        int sent = tx(() -> outbox.dispatchDue(T0.plusMinutes(2), 50));
-        eq("three invitation mails sent", 3, sent);
-        OutgoingMail toA = lastMailTo("a@x.com");
-        check("mail carries a portal link", tokenFrom(toA).length() == 43);
-        eq("bodies redacted after sending", 3L, count("SELECT count(*) FROM portal_outbox WHERE body_redacted AND status='SENT'"));
-        eq("no token left in the outbox", 0L, count("SELECT count(*) FROM portal_outbox WHERE body_text LIKE '%/invite/%'"));
-        check("sent_at is stamped on the invitation", find("G1", "a@x.com", T0.plusMinutes(3)).sentAt() != null);
-        eq("nothing more is due", 0, tx(() -> outbox.dispatchDue(T0.plusMinutes(3), 50)));
-
-        InviteView a = find("G1", "a@x.com", T0.plusMinutes(3));
-        String oldToken = tokenFrom(toA);
-        SessionMember asha = me("sub-a", "a@x.com", T0.plusMinutes(4));
-        PortalInviteDtos.InviteView seen = tx(() -> invitee.view(oldToken, asha, "ip", T0.plusMinutes(4)));
-        eq("invitee sees PENDING", "PENDING", seen.status());
-
-        InviteView re = tx(() -> invites.resend("G1", a.id(), key(), "admin1", "ip", T0.plusMinutes(5)));
-        eq("resend keeps the invitation PENDING", "PENDING", re.status());
-        check("resend queues a second mail (new dedupe key)", count("SELECT count(*) FROM portal_outbox WHERE dedupe_key = ?", "INVITE:" + a.id() + ":2") == 1);
-        tx(() -> outbox.dispatchDue(T0.plusMinutes(6), 50));
-        String newToken = tokenFrom(lastMailTo("a@x.com"));
-        check("resend issues a different token", !newToken.equals(oldToken));
-        refused("the old link no longer works", "INVITE_NOT_AVAILABLE", () -> invitee.view(oldToken, asha, "ip", T0.plusMinutes(7)));
-        eq("the new link works", "PENDING", tx(() -> invitee.view(newToken, asha, "ip", T0.plusMinutes(7))).status());
-        String rk = key();
-        tx(() -> invites.resend("G1", a.id(), rk, "admin1", "ip", T0.plusMinutes(8)));
-        long mailsAfter = count("SELECT count(*) FROM portal_outbox");
-        tx(() -> invites.resend("G1", a.id(), rk, "admin1", "ip", T0.plusMinutes(9)));
-        eq("resend replay queues nothing", mailsAfter, count("SELECT count(*) FROM portal_outbox"));
-        refused("resend of an unknown id", "NOT_FOUND", () -> invites.resend("G1", 99999, key(), "admin1", "ip", T0));
-
-        InviteView b = find("G1", "b@x.com", T0.plusMinutes(10));
-        String bToken = tokenFrom(lastMailTo("b@x.com"));
-        InviteView rv = tx(() -> invites.revoke("G1", b.id(), new RevokeRequest("wrong person"), "admin1", "ip", T0.plusMinutes(10)));
-        eq("revoked", "REVOKED", rv.status());
-        eq("revoke reason kept", "wrong person", rv.revokeReason());
-        eq("revoke twice is harmless", "REVOKED", tx(() -> invites.revoke("G1", b.id(), null, "admin1", "ip", T0.plusMinutes(11))).status());
-        SessionMember bob = me("sub-b", "b@x.com", T0.plusMinutes(12));
-        refused("revoked link looks like any dead link", "INVITE_NOT_AVAILABLE", () -> invitee.view(bToken, bob, "ip", T0.plusMinutes(12)));
-        refused("a revoked invite cannot be resent", "INVITE_NOT_RESENDABLE", () -> invites.resend("G1", b.id(), key(), "admin1", "ip", T0));
-        BatchResult back = tx(() -> invites.invite("G1", new InviteRequest(List.of(new Invitee("b@x.com", null, null)), null), key(), "admin1", "ip", T0.plusMinutes(13)));
-        eq("a revoked address can be invited again", 1, back.created().size());
-
-        // expiry: invitations run for 7 days
-        OffsetDateTime late = T0.plusDays(8);
-        InviteView d = find("G1", "d@x.com", late);
-        eq("past expiry reads as EXPIRED before the sweeper runs", "EXPIRED", d.status());
-        eq("but is still stored PENDING", "PENDING", jdbc.queryForObject("SELECT status FROM portal_invitation WHERE id = ?", String.class, d.id()));
-        eq("list filter uses the effective status", true, invites.list("G1", "EXPIRED", late).stream().anyMatch(v -> v.id() == d.id()));
-        String dToken = null;
-        for (OutgoingMail m : SENT) if (m.to().equals("d@x.com")) dToken = tokenFrom(m);
-        SessionMember dee = me("sub-d", "d@x.com", late);
-        String dt = dToken;
-        refused("an expired link is a dead link", "INVITE_NOT_AVAILABLE", () -> invitee.view(dt, dee, "ip", late));
-        int swept = tx(() -> invites.expireDue(late));
-        check("sweeper wrote EXPIRED", swept >= 2);
-        eq("stored status now EXPIRED", "EXPIRED", jdbc.queryForObject("SELECT status FROM portal_invitation WHERE id = ?", String.class, d.id()));
-        eq("sweeping again does nothing", 0, tx(() -> invites.expireDue(late)));
-        InviteView again = tx(() -> invites.resend("G1", d.id(), key(), "admin1", "ip", late));
-        eq("an expired invitation can be resent", "PENDING", again.status());
-        BatchResult fresh = tx(() -> invites.invite("G1", new InviteRequest(List.of(new Invitee("a@x.com", null, null)), null), key(), "admin1", "ip", late));
-        eq("an expired address is freed for a new invitation", 1, fresh.created().size());
-        eq("the old expired row is not the live one", "EXPIRED", jdbc.queryForObject("SELECT status FROM portal_invitation WHERE group_code='G1' AND email='a@x.com' ORDER BY id LIMIT 1", String.class));
-    }
-
     // ---- 3. outbox retry ----
-
-    static void mail() {
-        System.out.println("== mail: retry, back-off, give-up");
-        OffsetDateTime t = T0.plusDays(20);
-        tx(() -> invites.invite("G1", new InviteRequest(List.of(new Invitee("m@x.com", null, null)), null), key(), "admin1", "ip", t));
-        mailDown = true;
-        eq("failed send counts as zero sent", 0, tx(() -> outbox.dispatchDue(t, 50)));
-        eq("attempt recorded", 1, jdbc.queryForObject("SELECT attempts FROM portal_outbox WHERE recipient_email='m@x.com'", Integer.class));
-        eq("still PENDING after one failure", "PENDING", jdbc.queryForObject("SELECT status FROM portal_outbox WHERE recipient_email='m@x.com'", String.class));
-        check("error text kept", jdbc.queryForObject("SELECT last_error FROM portal_outbox WHERE recipient_email='m@x.com'", String.class).contains("smtp down"));
-        eq("not retried straight away", 0, tx(() -> outbox.dispatchDue(t.plusSeconds(30), 50)));
-        eq("attempts unchanged by the early poll", 1, jdbc.queryForObject("SELECT attempts FROM portal_outbox WHERE recipient_email='m@x.com'", Integer.class));
-        eq("retried after the delay (still down)", 0, tx(() -> outbox.dispatchDue(t.plusMinutes(2), 50)));
-        eq("attempt 2", 2, jdbc.queryForObject("SELECT attempts FROM portal_outbox WHERE recipient_email='m@x.com'", Integer.class));
-        mailDown = false;
-        check("sent once the gateway is back", tx(() -> outbox.dispatchDue(t.plusMinutes(10), 50)) >= 1);
-        eq("status SENT", "SENT", jdbc.queryForObject("SELECT status FROM portal_outbox WHERE recipient_email='m@x.com'", String.class));
-        check("invitation shows the mail was sent", find("G1", "m@x.com", t.plusMinutes(11)).sentAt() != null);
-
-        tx(() -> invites.invite("G1", new InviteRequest(List.of(new Invitee("n@x.com", null, null)), null), key(), "admin1", "ip", t));
-        mailDown = true;
-        OffsetDateTime p = t.plusHours(1);
-        for (int i = 0; i < 5; i++) { final int n = i; tx(() -> outbox.dispatchDue(p.plusDays(n), 50)); }
-        eq("gives up after max-attempts (3 in this harness)", "FAILED", jdbc.queryForObject("SELECT status FROM portal_outbox WHERE recipient_email='n@x.com'", String.class));
-        eq("attempts stop at the limit", 3, jdbc.queryForObject("SELECT attempts FROM portal_outbox WHERE recipient_email='n@x.com'", Integer.class));
-        eq("admin sees SEND_FAILED", "SEND_FAILED", find("G1", "n@x.com", p.plusDays(6)).mailStatus());
-        mailDown = false;
-    }
 
     // ---- 4. sign-in ----
 
@@ -466,224 +354,14 @@ public class PortalHarness {
 
         refused("a bad id token", "INVALID_ID_TOKEN", () -> auth.signIn("garbage", "UA", "ip", t));
         jdbc.inTx(() -> jdbc.update("UPDATE portal_member SET status='BLOCKED' WHERE id = ?", s1.member().id()));
-        check("sign-in and invitee refusals keep their audit rows (annotation present)", keepsAuditOnRefusal(PortalAuthService.class, "signIn") && keepsAuditOnRefusal(PortalInviteService.class, "view") && keepsAuditOnRefusal(PortalInviteService.class, "decline"));
+        check("sign-in refusals keep their audit rows (annotation present)", keepsAuditOnRefusal(PortalAuthService.class, "signIn"));
         eq("refused sign-ins are audited", 1L, count("SELECT count(*) FROM portal_audit WHERE action='SIGN_IN_REFUSED'"));
         refusedKeep("a blocked member cannot sign in", "MEMBER_BLOCKED", () -> auth.signIn(idToken("sub-new", "new@x.com", "N"), "UA", "ip", t));
     }
 
     // ---- 5. the invitee's side of an invitation ----
 
-    static void inviteeScenarios() {
-        System.out.println("== invitee: view, decline, email mismatch, neutral errors");
-        OffsetDateTime t = T0.plusDays(40);
-        tx(() -> invites.invite("G1", new InviteRequest(List.of(new Invitee("v@x.com", "Vee", 3)), null), key(), "admin1", "ip", t));
-        tx(() -> outbox.dispatchDue(t, 50));
-        String token = tokenFrom(lastMailTo("v@x.com"));
-        SessionMember vee = me("sub-v", "v@x.com", t);
-        SessionMember eve = me("sub-e", "e@x.com", t);
-
-        refusedKeep("a different signed-in person gets a mismatch, not the invite", "INVITE_EMAIL_MISMATCH", () -> invitee.view(token, eve, "ip", t));
-        refusedKeep("and cannot decline it", "INVITE_EMAIL_MISMATCH", () -> invitee.decline(token, eve, "ip", t));
-        eq("mismatch is audited, both times", 2L, count("SELECT count(*) FROM portal_audit WHERE action='EMAIL_MISMATCH'"));
-        eq("invitation untouched by the mismatch", "PENDING", find("G1", "v@x.com", t).status());
-        check("not marked opened by the wrong person", find("G1", "v@x.com", t).firstOpenedAt() == null);
-
-        refused("garbage token", "INVITE_NOT_AVAILABLE", () -> invitee.view("short", vee, "ip", t));
-        refused("well-formed unknown token", "INVITE_NOT_AVAILABLE", () -> invitee.view("A".repeat(43), vee, "ip", t));
-
-        PortalInviteDtos.InviteView v = tx(() -> invitee.view(token, vee, "ip", t.plusMinutes(1)));
-        eq("tickets offered", 3, v.tickets());
-        eq("group name shown", "Group G1", v.groupName());
-        check("group terms come from chitfund-service", v.group() != null && v.group().subscription().compareTo(new BigDecimal("5000")) == 0);
-        eq("can decline", true, v.canDecline());
-        check("first open recorded", find("G1", "v@x.com", t.plusMinutes(2)).firstOpenedAt() != null);
-        OffsetDateTime opened = find("G1", "v@x.com", t.plusMinutes(2)).firstOpenedAt();
-        tx(() -> invitee.view(token, vee, "ip", t.plusHours(3)));
-        eq("opening again keeps the first-open time", opened, find("G1", "v@x.com", t.plusHours(4)).firstOpenedAt());
-        eq("one OPENED audit row", 1L, count("SELECT count(*) FROM portal_audit WHERE action='OPENED' AND entity_ref LIKE ?", "G1#" + find("G1", "v@x.com", t).id()));
-
-        PortalInviteDtos.InviteView dec = tx(() -> invitee.decline(token, vee, "ip", t.plusHours(5)));
-        eq("declined", "DECLINED", dec.status());
-        eq("cannot decline again from the view", false, dec.canDecline());
-        eq("declining twice changes nothing", "DECLINED", tx(() -> invitee.decline(token, vee, "ip", t.plusHours(6))).status());
-        eq("admin sees DECLINED", "DECLINED", find("G1", "v@x.com", t.plusHours(7)).status());
-        refused("a declined invite cannot be revoked", "INVITE_NOT_REVOCABLE", () -> invites.revoke("G1", find("G1", "v@x.com", t).id(), null, "admin1", "ip", t));
-        refused("a declined invite cannot be resent", "INVITE_NOT_RESENDABLE", () -> invites.resend("G1", find("G1", "v@x.com", t).id(), key(), "admin1", "ip", t));
-        BatchResult again = tx(() -> invites.invite("G1", new InviteRequest(List.of(new Invitee("v@x.com", null, null)), null), key(), "admin1", "ip", t.plusDays(1)));
-        eq("a declined address can be invited again", 1, again.created().size());
-
-        // chitfund-service unreachable while the invitee looks at it: the page still answers
-        GROUPS.remove("G1");
-        PortalInviteDtos.InviteView degraded = tx(() -> invitee.view(tokenFrom(lastMailToOrNull("v@x.com", t)), vee, "ip", t.plusDays(1)));
-        eq("group details unavailable is reported, not thrown", true, degraded.groupUnavailable());
-        group("G1", "OPEN_FOR_ENROLMENT", 5);
-    }
-
     // ---- 6. accepting enrols: customer by e-mail, self-service, awaiting payment, admin enrol, partial failure, retries ----
 
-    static String inviteToken(String code, String email, String name, Integer tickets, Long existing, OffsetDateTime t) {
-        tx(() -> invites.invite(code, new InviteRequest(List.of(new Invitee(email, name, tickets, existing)), null), key(), "admin1", "ip", t));
-        tx(() -> outbox.dispatchDue(t, 50));
-        return tokenFrom(lastMailTo(email));
-    }
-
-    static void enrolmentScenarios() {
-        System.out.println("== enrol: accept makes the e-mail a customer and enrols; waits when something is due");
-        OffsetDateTime t = T0.plusDays(60);
-        eq("accept keeps the refusal audit rows (noRollbackFor)", true, keepsAuditOnRefusal(PortalInviteService.class, "accept"));
-        eq("admin enrol keeps what it did before a refusal", true, keepsAuditOnRefusal(InvitationService.class, "enrol"));
-
-        // 1. nothing due, new person, two tickets: enrolled straight away
-        String t1 = inviteToken("G1", "new1@x.com", "Nia", 2, null, t);
-        SessionMember nia = me("en-n1", "new1@x.com", t);
-        PortalInviteDtos.InviteView v0 = tx(() -> invitee.view(t1, nia, "ip", t));
-        eq("pending invitation can be accepted", true, v0.canAccept());
-        eq("nothing due is shown as 0", true, v0.cashDuePerTicket() != null && v0.cashDuePerTicket().signum() == 0);
-        PortalInviteDtos.InviteView a1 = txKeep(() -> invitee.accept(t1, nia, "ip", t.plusMinutes(5)));
-        eq("accepted and enrolled at once", "ACCEPTED", a1.status());
-        eq("both tickets enrolled", 2, a1.ticketsEnrolled());
-        eq("two ticket numbers shown", 2, a1.ticketNos().size());
-        check("a new customer id was created and shown", a1.customerId() != null && a1.customerId() >= 5000);
-        eq("the e-mail is the customer's key in chitfund-service", a1.customerId(), CUSTOMERS.get("new1@x.com"));
-        eq("canAccept false afterwards", false, a1.canAccept());
-        InviteView adm1 = find("G1", "new1@x.com", t.plusMinutes(6));
-        eq("admin sees ACCEPTED with the customer id", a1.customerId(), adm1.customerId());
-        eq("admin sees tickets enrolled", 2, adm1.ticketsEnrolled());
-        eq("a CUSTOMER_CREATED audit row", 1L, count("SELECT count(*) FROM portal_audit WHERE action='CUSTOMER_CREATED' AND entity_ref = ?", "G1#" + adm1.id()));
-        int calls = enrolCalls;
-        PortalInviteDtos.InviteView a1b = txKeep(() -> invitee.accept(t1, nia, "ip", t.plusMinutes(9)));
-        eq("accepting again changes nothing", "ACCEPTED", a1b.status());
-        eq("and makes no chitfund-service call", calls, enrolCalls);
-        refused("an accepted invitation cannot be declined", "INVITE_NOT_DECLINABLE", () -> invitee.decline(t1, nia, "ip", t.plusMinutes(10)));
-        refused("an accepted invitation cannot be revoked", "INVITE_NOT_REVOCABLE", () -> invites.revoke("G1", adm1.id(), null, "admin1", "ip", t));
-        refused("admin cannot enrol an invitation that is already complete", "INVITE_NOT_AWAITING_PAYMENT",
-                () -> invites.enrol("G1", adm1.id(), new EnrolRequest(true, null, null, null), "admin1", "ip", t));
-        refused("another address cannot be invited as already accepted", "ALREADY_MEMBER",
-                () -> { BatchResult r = invites.invite("G1", new InviteRequest(List.of(new Invitee("new1@x.com", null, null)), null), key(), "admin1", "ip", t);
-                        throw new PortalException(r.skipped().get(0).code(), "x"); });
-
-        // 2. the e-mail is already a customer: the invite shows it, accept reuses it
-        CUSTOMERS.put("known@x.com", 777L);
-        String t2 = inviteToken("G1", "known@x.com", "Kay", 1, null, t);
-        eq("existing customer id prefilled on the invitation", 777L, find("G1", "known@x.com", t).customerId());
-        PortalInviteDtos.InviteView a2 = txKeep(() -> invitee.accept(t2, me("en-k", "known@x.com", t), "ip", t.plusMinutes(5)));
-        eq("enrolled under the existing customer", 777L, a2.customerId());
-        eq("no new customer made", 0L, count("SELECT count(*) FROM portal_audit WHERE action='CUSTOMER_CREATED' AND entity_ref = ?", "G1#" + find("G1", "known@x.com", t).id()));
-        eq("Gmail address variants are the same customer", true, CUSTOMERS.containsKey("known@x.com") && Emails.normalise("Known@X.com").equals("known@x.com"));
-
-        // 3. admin names an old customer id with the e-mail
-        BatchResult mism = tx(() -> invites.invite("G1", new InviteRequest(List.of(new Invitee("known@x.com", null, null, 999L), new Invitee("bad@x.com", null, 1, -3L)), null), key(), "admin1", "ip", t));
-        eq("e-mail already customer 777, id 999 named: skipped", "EMAIL_CUSTOMER_MISMATCH", mism.skipped().get(0).code());
-        eq("negative customer id skipped", "INVALID_CUSTOMER_ID", mism.skipped().get(1).code());
-        String t3 = inviteToken("G1", "legacy@x.com", "Lee", 1, 4242L, t);
-        eq("old id stored on the invitation", 4242L, find("G1", "legacy@x.com", t).existingCustomerId());
-        PortalInviteDtos.InviteView a3 = txKeep(() -> invitee.accept(t3, me("en-l", "legacy@x.com", t), "ip", t.plusMinutes(5)));
-        eq("the e-mail was attached to the old id", 4242L, a3.customerId());
-        eq("a CUSTOMER_LINKED audit row", 1L, count("SELECT count(*) FROM portal_audit WHERE action='CUSTOMER_LINKED' AND entity_ref = ?", "G1#" + find("G1", "legacy@x.com", t).id()));
-        String t3b = inviteToken("G1", "thief@x.com", null, 1, 4242L, t);
-        refusedKeep("an old id that belongs to another e-mail is refused", "CUSTOMER_EMAIL_TAKEN", () -> invitee.accept(t3b, me("en-t", "thief@x.com", t), "ip", t.plusMinutes(5)));
-        eq("that invitation is still pending", "PENDING", find("G1", "thief@x.com", t).status());
-
-        // 4. something is due: accept waits, admin records the receipt
-        QUOTES.put("G-FEE", new ChitEnrolmentGateway.Quote(new BigDecimal("1000"), new BigDecimal("500"), new BigDecimal("8500"), BigDecimal.ZERO, false, new BigDecimal("10000")));
-        group("G-FEE", "OPEN_FOR_ENROLMENT", 5);
-        String t4 = inviteToken("G-FEE", "pay@x.com", "Pia", 2, null, t);
-        SessionMember pia = me("en-p", "pay@x.com", t);
-        eq("the amount due per ticket is shown before accepting", new BigDecimal("10000"), tx(() -> invitee.view(t4, pia, "ip", t)).cashDuePerTicket());
-        int before = enrolCalls;
-        PortalInviteDtos.InviteView a4 = txKeep(() -> invitee.accept(t4, pia, "ip", t.plusMinutes(5)));
-        eq("accepted but waiting for payment", "ACCEPTED_AWAITING_PAYMENT", a4.status());
-        eq("no ticket enrolled yet", 0, a4.ticketsEnrolled());
-        check("customer already known so the receipt can name it", a4.customerId() != null);
-        eq("no chitfund-service enrol call", before, enrolCalls);
-        eq("cannot be accepted twice into a different state", "ACCEPTED_AWAITING_PAYMENT", txKeep(() -> invitee.accept(t4, pia, "ip", t.plusMinutes(6))).status());
-        refused("a waiting invitation cannot be declined", "INVITE_NOT_DECLINABLE", () -> invitee.decline(t4, pia, "ip", t.plusMinutes(7)));
-        long id4 = find("G-FEE", "pay@x.com", t).id();
-        refusedKeep("admin must confirm the fees", "VALIDATION_FAILED", () -> invites.enrol("G-FEE", id4, new EnrolRequest(false, null, null, null), "admin1", "ip", t.plusHours(1)));
-        RECEIVED.clear();
-        InviteView e4 = txKeep(() -> invites.enrol("G-FEE", id4, new EnrolRequest(true, null, null, "ACC-1"), "admin1", "ip", t.plusHours(1)));
-        eq("admin enrol completes it", "ACCEPTED", e4.status());
-        eq("both tickets enrolled", 2, e4.ticketsEnrolled());
-        eq("each ticket received exactly the quoted fees", new BigDecimal("8500"), RECEIVED.get(0).securityDeposit());
-        eq("and the registration fee", new BigDecimal("500"), RECEIVED.get(1).registrationFee());
-        eq("payout account passed on", "ACC-1", RECEIVED.get(0).payoutAccountRef());
-        eq("the enrolment audit names the actor", true, count("SELECT count(*) FROM portal_audit WHERE action='TICKET_ENROLLED' AND actor='admin1' AND entity_ref = ?", "G-FEE#" + id4) == 2L);
-
-        // a revoked waiting invitation can no longer be accepted or enrolled
-        String t5 = inviteToken("G-FEE", "rev@x.com", null, 1, null, t);
-        txKeep(() -> invitee.accept(t5, me("en-r", "rev@x.com", t), "ip", t.plusMinutes(5)));
-        long id5 = find("G-FEE", "rev@x.com", t).id();
-        tx(() -> invites.revoke("G-FEE", id5, new RevokeRequest("changed mind"), "admin1", "ip", t.plusMinutes(8)));
-        refusedKeep("revoked: accept is not available", "INVITE_NOT_AVAILABLE", () -> invitee.accept(t5, me("en-r", "rev@x.com", t), "ip", t.plusMinutes(9)));
-        refused("revoked: admin cannot enrol", "INVITE_NOT_AWAITING_PAYMENT", () -> invites.enrol("G-FEE", id5, new EnrolRequest(true, null, null, null), "admin1", "ip", t.plusMinutes(9)));
-
-        // guarantor and lien groups need those papers named
-        QUOTES.put("G-GUAR", new ChitEnrolmentGateway.Quote(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, new BigDecimal("50000"), true, BigDecimal.ZERO));
-        group("G-GUAR", "OPEN_FOR_ENROLMENT", 5);
-        String t6 = inviteToken("G-GUAR", "gua@x.com", null, 1, null, t);
-        eq("guarantor/lien means accept waits even when no cash is due", "ACCEPTED_AWAITING_PAYMENT", txKeep(() -> invitee.accept(t6, me("en-g", "gua@x.com", t), "ip", t.plusMinutes(5))).status());
-        long id6 = find("G-GUAR", "gua@x.com", t).id();
-        refusedKeep("guarantor required", "VALIDATION_FAILED", () -> invites.enrol("G-GUAR", id6, new EnrolRequest(true, null, "LIEN-1", null), "admin1", "ip", t.plusHours(1)));
-        refusedKeep("lien reference required", "VALIDATION_FAILED", () -> invites.enrol("G-GUAR", id6, new EnrolRequest(true, 4242L, null, null), "admin1", "ip", t.plusHours(1)));
-        InviteView e6 = txKeep(() -> invites.enrol("G-GUAR", id6, new EnrolRequest(true, 4242L, "LIEN-1", null), "admin1", "ip", t.plusHours(1)));
-        eq("enrolled with guarantor and lien", "ACCEPTED", e6.status());
-        eq("guarantor passed on", 4242L, RECEIVED.get(RECEIVED.size() - 1).guarantorCustomerId());
-        eq("lien reference passed on", "LIEN-1", RECEIVED.get(RECEIVED.size() - 1).lienReference());
-
-        // 5. failures: first ticket, later ticket, then top-up
-        String t7 = inviteToken("G1", "part@x.com", null, 3, null, t);
-        SessionMember pat = me("en-pt", "part@x.com", t);
-        long id7 = find("G1", "part@x.com", t).id();
-        FAIL_KEYS.add("PORTAL-ENROL:" + id7 + ":1");
-        refusedKeep("first ticket fails: the accept is refused", "CHIT_SERVICE_UNAVAILABLE", () -> invitee.accept(t7, pat, "ip", t.plusMinutes(5)));
-        eq("invitation still pending, nothing marked", "PENDING", find("G1", "part@x.com", t).status());
-        eq("no ticket rows", 0L, count("SELECT count(*) FROM portal_invitation_ticket WHERE invitation_id = ?", id7));
-        FAIL_KEYS.clear();
-        FAIL_KEYS.add("PORTAL-ENROL:" + id7 + ":2");
-        PortalInviteDtos.InviteView a7 = txKeep(() -> invitee.accept(t7, pat, "ip", t.plusMinutes(6)));
-        eq("retry: accepted", "ACCEPTED", a7.status());
-        eq("a later ticket failed: only the first is enrolled", 1, a7.ticketsEnrolled());
-        eq("TICKET_NOT_ENROLLED audited", 1L, count("SELECT count(*) FROM portal_audit WHERE action='TICKET_NOT_ENROLLED' AND entity_ref = ?", "G1#" + id7));
-        FAIL_KEYS.clear();
-        InviteView top = txKeep(() -> invites.enrol("G1", id7, new EnrolRequest(true, null, null, null), "admin1", "ip", t.plusHours(2)));
-        eq("admin tops up the missing tickets", 3, top.ticketsEnrolled());
-        check("ticket numbers are distinct", new HashSet<>(invitee.getClass() == null ? List.of() : tx(() -> invitee.view(t7, pat, "ip", t.plusHours(3))).ticketNos()).size() == 3);
-
-        // a crash after chitfund-service made the ticket but before the portal wrote it: the retry reuses that ticket
-        String t8 = inviteToken("G1", "crash@x.com", null, 1, null, t);
-        long id8 = find("G1", "crash@x.com", t).id();
-        TICKETS.put("PORTAL-ENROL:" + id8 + ":1", 900);
-        PortalInviteDtos.InviteView a8 = txKeep(() -> invitee.accept(t8, me("en-c", "crash@x.com", t), "ip", t.plusMinutes(5)));
-        eq("the ticket made earlier is the one recorded", List.of(900), a8.ticketNos());
-
-        // 6. the group closed or filled between invite and accept
-        group("G-TMP", "OPEN_FOR_ENROLMENT", 5);
-        String t9 = inviteToken("G-TMP", "late@x.com", null, 1, null, t);
-        SessionMember late = me("en-lt", "late@x.com", t);
-        group("G-TMP", "ACTIVE", 5);
-        refusedKeep("group no longer open", "ENROLMENT_NOT_OPEN", () -> invitee.accept(t9, late, "ip", t.plusMinutes(5)));
-        group("G-TMP", "OPEN_FOR_ENROLMENT", 0);
-        refusedKeep("group full", "GROUP_FULL", () -> invitee.accept(t9, late, "ip", t.plusMinutes(6)));
-        eq("still pending after both refusals", "PENDING", find("G-TMP", "late@x.com", t).status());
-
-        // wrong person, expired, declined, lookup down
-        String t10 = inviteToken("G1", "own@x.com", null, 1, null, t);
-        SessionMember intruder = me("en-i", "intruder@x.com", t);
-        refusedKeep("someone else cannot accept", "INVITE_EMAIL_MISMATCH", () -> invitee.accept(t10, intruder, "ip", t.plusMinutes(5)));
-        refusedKeep("an expired link is not available", "INVITE_NOT_AVAILABLE", () -> invitee.accept(t10, me("en-o", "own@x.com", t.plusDays(8)), "ip", t.plusDays(8)));
-        String t11 = inviteToken("G1", "dec@x.com", null, 1, null, t);
-        SessionMember dec = me("en-d", "dec@x.com", t);
-        tx(() -> invitee.decline(t11, dec, "ip", t.plusMinutes(5)));
-        refusedKeep("a declined invitation cannot be accepted", "INVITE_NOT_ACCEPTABLE", () -> invitee.accept(t11, dec, "ip", t.plusMinutes(6)));
-        customersDown = true;
-        BatchResult down = tx(() -> invites.invite("G1", new InviteRequest(List.of(new Invitee("down@x.com", null, null)), null), key(), "admin1", "ip", t));
-        customersDown = false;
-        eq("customer lookup down at invite time does not block the invitation", 1, down.created().size());
-    }
-
     /** The newest invitation for the address was queued but not yet sent: send it, then read the link. */
-    static OutgoingMail lastMailToOrNull(String email, OffsetDateTime t) {
-        tx(() -> outbox.dispatchDue(t.plusDays(1), 50));
-        return lastMailTo(email);
-    }
 }

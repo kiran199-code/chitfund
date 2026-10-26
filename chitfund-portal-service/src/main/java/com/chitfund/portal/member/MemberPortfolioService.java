@@ -11,7 +11,7 @@ import com.chitfund.portal.chit.ChitPortfolioGateway.Request;
 import com.chitfund.portal.chit.ChitPortfolioGateway.Ticket;
 import com.chitfund.portal.common.Audit;
 import com.chitfund.portal.common.PortalException;
-import com.chitfund.portal.invite.Emails;
+import com.chitfund.portal.common.Emails;
 import com.chitfund.portal.member.OfferSource.OfferView;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

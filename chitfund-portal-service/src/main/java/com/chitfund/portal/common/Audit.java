@@ -3,7 +3,7 @@ package com.chitfund.portal.common;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-/** Audit trail for invitations, sign-ins and decisions. Runs inside the caller's transaction. */
+/** Audit trail for sign-ins and decisions. Runs inside the caller's transaction. */
 @Component
 public class Audit {
     private final JdbcTemplate jdbc;

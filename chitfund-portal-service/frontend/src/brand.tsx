@@ -6,27 +6,24 @@ export const BRAND = { name: 'Honest Savers Chit Fund', short: 'Honest Savers', 
 
 export function LogoMark({ size = 40 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 48 48" role="img" aria-label="Honest Savers logo">
-      <defs>
-        <linearGradient id="lm-r" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#ff5a60" /><stop offset="1" stopColor="#a9121a" /></linearGradient>
-      </defs>
-      <circle cx="24" cy="24" r="23" fill="url(#lm-r)" stroke="#c9cbcf" strokeWidth="2" />
-      <circle cx="24" cy="19" r="9.5" fill="#fff" />
-      <circle cx="24" cy="19" r="7.2" fill="none" stroke="#eceef0" strokeWidth="1.2" />
-      <path d="M19.5 19l3.2 3.2 5.8-6.4" stroke="#d71920" strokeWidth="2.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M9.5 31q14.5 12 29 0" stroke="#c9cbcf" strokeWidth="3.6" fill="none" strokeLinecap="round" />
-      <path d="M13 36.5q11 7 22 0" stroke="#8b8f94" strokeWidth="2" fill="none" strokeLinecap="round" opacity=".8" />
-    </svg>
+    <span className="logomark" style={{ width: size, height: size }} role="img" aria-label="Honest Savers logo">
+      <span className="logomark-in">
+        <svg viewBox="0 0 24 24" width={size * 0.58} height={size * 0.58} fill="none" stroke="#facc15" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+          <circle cx="12" cy="12" r="3" fill="#facc15" stroke="none" />
+        </svg>
+      </span>
+    </span>
   );
 }
 
 export function Logo({ compact = false, light = false }: { compact?: boolean; light?: boolean }) {
   return (
     <span className={light ? 'logo logo-light' : 'logo'}>
-      <LogoMark size={compact ? 34 : 44} />
+      <LogoMark size={compact ? 44 : 48} />
       <span className="logo-words">
         <strong>{compact ? BRAND.short : BRAND.name}</strong>
-        {!compact && <em>{BRAND.tagline}</em>}
+        <em>{BRAND.tagline}</em>
       </span>
     </span>
   );

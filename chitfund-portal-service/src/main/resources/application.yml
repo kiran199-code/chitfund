@@ -19,12 +19,6 @@ spring:
     default-property-inclusion: non_null
     serialization:
       write-dates-as-timestamps: false
-  # Only used when chit.portal.mail.mode=SMTP. Set SPRING_MAIL_HOST etc. in the environment.
-  mail:
-    host: ${SMTP_HOST:}
-    port: ${SMTP_PORT:587}
-    username: ${SMTP_USERNAME:}
-    password: ${SMTP_PASSWORD:}
 
 server:
   port: ${PORT:8087}
@@ -34,11 +28,6 @@ management:
     web:
       exposure:
         include: health,info
-  health:
-    # With no SMTP server configured (mail mode CONSOLE) the mail health check would try localhost:587, fail, and report the whole
-    # service DOWN, so the host's health check would kill it. Mail failures are handled by the outbox retry instead.
-    mail:
-      enabled: false
 
 chit:
   # How the portal reaches chitfund-service (HTTP Basic service credential, the same one the batch service uses).
@@ -57,14 +46,10 @@ chit:
     timezone: ${CHIT_TIMEZONE:Asia/Kolkata}
     # true only behind exactly one trusted proxy that appends to X-Forwarded-For (rate limits and audit then use its last entry)
     trust-forwarded-for: ${PORTAL_TRUST_FORWARDED_FOR:false}
-    # Public address of the portal web app; invite links are <base-url>/invite/<token>.
+    # Public address of the portal web app.
     base-url: ${PORTAL_BASE_URL:http://localhost:5173}
     # Browser origins allowed to call the member API with a session cookie (comma separated).
     allowed-origins: ${PORTAL_ALLOWED_ORIGINS:http://localhost:5173}
-    invite:
-      lifetime-days: ${PORTAL_INVITE_LIFETIME_DAYS:7}
-      max-batch: 200
-      max-tickets-per-invite: ${PORTAL_MAX_TICKETS_PER_INVITE:5}
     session:
       hours: ${PORTAL_SESSION_HOURS:8}
       # (the cookie is always named portal_session)
@@ -75,12 +60,5 @@ chit:
       # OAuth client id of the portal web app: the ID token's audience must equal it. Empty = sign-in refuses every token.
       client-id: ${GOOGLE_CLIENT_ID:}
       jwk-set-uri: https://www.googleapis.com/oauth2/v3/certs
-    mail:
-      # CONSOLE writes the message to the log (development); SMTP sends it through spring.mail.*
-      mode: ${PORTAL_MAIL_MODE:CONSOLE}
-      from: ${PORTAL_MAIL_FROM:no-reply@example.invalid}
-      dispatch-interval-millis: 15000
-      max-attempts: 6
     rate-limit:
       sign-in-per-minute: 20
-      invite-lookup-per-minute: 30

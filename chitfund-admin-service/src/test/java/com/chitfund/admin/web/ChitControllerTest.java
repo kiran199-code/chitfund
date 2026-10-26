@@ -280,4 +280,13 @@ class ChitControllerTest {
         assertThat(chit.last().path()).isEqualTo("/groups/G1/cycles/2/payout");
         assertThatThrownBy(() -> controller.auction("bad code", 1)).hasMessageContaining("code");
     }
+
+    @Test
+    void listingIsForwardedAsPutWithActingName() throws Exception {
+        controller.setListing("G1", JSON.readTree("{\"planCategory\":\"HOME\",\"branch\":\"Hyderabad\",\"state\":\"Telangana\"}"), "ravi", () -> "chit-ops");
+        assertThat(chit.last().method()).isEqualTo(HttpMethod.PUT);
+        assertThat(chit.last().path()).isEqualTo("/groups/G1/listing");
+        assertThat(chit.last().actor()).isEqualTo("ravi");
+        assertThatThrownBy(() -> controller.setListing("bad code!", JSON.readTree("{}"), null, () -> "chit-ops")).isInstanceOf(IllegalArgumentException.class);
+    }
 }

@@ -228,15 +228,9 @@ export interface ChitCover { cycleNo: number; ticketNo: number; amount: number; 
 export interface ChitCustomerRef { customerId: number; email: string; name: string | null; created: boolean; linkedExisting: boolean }
 export interface ChitCustomerLookup { customerIds: Record<string, number> }
 
-export interface PortalInvitation {
-  id: number; groupCode: string; email: string; inviteeName: string | null; tickets: number; status: string;
-  expiresAt: string; sentAt: string | null; firstOpenedAt: string | null; acceptedAt: string | null; declinedAt: string | null;
-  revokedAt: string | null; revokeReason: string | null; mailStatus: string | null; mailAttempts: number | null;
-  createdBy: string; createdAt: string; customerId: number | null; existingCustomerId: number | null; ticketsEnrolled: number;
-}
-export interface PortalSkipped { email: string | null; code: string; message: string }
-export interface PortalBatchResult {
-  groupCode: string; created: PortalInvitation[]; skipped: PortalSkipped[]; seatsLeft: number | null; pendingInvites: number; replayed: boolean;
+export interface PortalJoinRequest {
+  id: number; email: string; memberName: string | null; groupCode: string; groupName: string | null; tickets: number;
+  status: 'PENDING' | 'APPROVED' | 'DECLINED' | 'WITHDRAWN'; requestedAt: string; note: string | null; decidedBy: string | null; decidedAt: string | null;
 }
 
 export interface PortalOffer {

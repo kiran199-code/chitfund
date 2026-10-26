@@ -17,10 +17,9 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 /**
- * The console's way into chitfund-portal-service's admin API (/api/v1/portal/admin) with that service's admin login: invite people to a
- * group by e-mail, follow their replies, resend, revoke, and record the receipt that enrols an accepted invitation. This service has no
- * database; the invitations live in the portal service. Every call names the acting person in X-Actor; invite and resend carry an
- * Idempotency-Key.
+ * The console's way into chitfund-portal-service's admin API (/api/v1/portal/admin) with that service's admin login: offers and portal text,
+ * and the seat requests members make on the portal (approve or decline). This service has no database; the data lives in the portal
+ * service. Every call names the acting person in X-Actor.
  */
 @Service
 public class PortalClient {

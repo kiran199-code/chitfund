@@ -1,4 +1,4 @@
-package com.chitfund.portal.invite;
+package com.chitfund.portal.common;
 
 import java.util.Locale;
 import java.util.regex.Pattern;

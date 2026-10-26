@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { get, send } from '../api';
 import { ChitBadge, ChitGate, GroupBadge, useCanChangeChit, wholeNumber } from '../components/chit';
 import { GroupPrizesCard } from '../components/chitAuction';
-import { InvitePanel } from '../components/chitInvites';
+import { ListingCard } from '../components/chitListing';
 import { GroupCollectionCard, PaymentsTable, ReceiptModal, ReversePaymentDialog } from '../components/chitCollection';
 import DataTable, { Col } from '../components/DataTable';
 import { ActingAsBar, NoticeBanner, useActingAs } from '../components/actingAs';
@@ -159,9 +159,7 @@ function Body({ code }: { code: string }) {
         </Card>
       )}
 
-      {g.status === 'OPEN_FOR_ENROLMENT' && canChange && (
-        <InvitePanel code={g.groupCode} quote={quote.data} onChanged={() => setTick(t => t + 1)} />
-      )}
+      {(g.status === 'DRAFT' || g.status === 'OPEN_FOR_ENROLMENT') && canChange && <ListingCard code={g.groupCode} />}
 
       <Card title={`Tickets (${live.length} of ${g.ticketCount})`} actions={<button className="btn" onClick={() => setTick(t => t + 1)}>Refresh</button>}>
         {tickets.loading && !tickets.data && <Loading />}

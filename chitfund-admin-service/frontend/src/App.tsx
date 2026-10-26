@@ -13,6 +13,7 @@ import ChitTicket from './pages/ChitTicket';
 import EndOfDay from './pages/EndOfDay';
 import Home from './pages/Home';
 import Login from './pages/Login';
+import JoinRequests from './pages/JoinRequests';
 import Offers from './pages/Offers';
 import Maintenance from './pages/Maintenance';
 
@@ -31,6 +32,7 @@ function Gate() {
         <Route path="chit/groups/:code/cycles/:no" element={<ChitCycle />} />
         <Route path="chit/dues" element={<ChitDues />} />
         <Route path="offers" element={<Offers />} />
+        <Route path="join-requests" element={<JoinRequests />} />
         <Route path="calendar" element={<Calendar />} />
         <Route path="batch" element={<Batch />} />
         <Route path="eod" element={<EndOfDay />} />

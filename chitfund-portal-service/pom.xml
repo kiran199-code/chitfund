@@ -16,8 +16,8 @@
     <version>0.1.0-SNAPSHOT</version>
     <name>chitfund-portal-service</name>
     <description>
-        Member-facing side of the chit fund: invitations by email, Google sign-in (no passwords), member sessions, and
-        (later steps) accepting an invite, submitting payments and placing bids. Its own database schema ('portal');
+        Member-facing side of the chit fund: seat requests, Google sign-in (no passwords), member sessions, and
+        (later steps) submitting payments and placing bids. Its own database schema ('portal');
         it reads and changes chit data only through the chitfund-service REST API.
     </description>
 
@@ -47,10 +47,6 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

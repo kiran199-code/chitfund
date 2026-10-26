@@ -42,7 +42,7 @@ batch:
     username: ${BATCH_ADMIN_USERNAME:batch-admin}
     password: ${BATCH_ADMIN_PASSWORD:}
 
-# Invitations by e-mail: done through chitfund-portal-service's admin API.
+# Customer portal (offers, seat requests): done through chitfund-portal-service's admin API.
 portal:
   service:
     base-url: ${PORTAL_SERVICE_URL:}

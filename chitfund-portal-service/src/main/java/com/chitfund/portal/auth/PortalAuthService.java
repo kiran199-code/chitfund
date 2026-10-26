@@ -4,12 +4,12 @@ import com.chitfund.portal.auth.MemberRepository.MemberRow;
 import com.chitfund.portal.common.Audit;
 import com.chitfund.portal.common.Hashing;
 import com.chitfund.portal.common.PortalException;
-import com.chitfund.portal.invite.InviteTokens;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
+import java.util.Base64;
 import java.time.OffsetDateTime;
 
 /**
@@ -72,12 +72,14 @@ public class PortalAuthService {
             throw PortalException.forbidden("MEMBER_BLOCKED", "This account cannot sign in");
         }
         if (!who.email().equals(m.email())) {
-            // Google now reports another address for the same account. Access stays tied to the address on file: invitations match on it.
+            // Google now reports another address for the same account. Access stays tied to the address on file.
             audit.log("MEMBER", String.valueOf(m.id()), "EMAIL_CHANGED_AT_GOOGLE", m.email(), ip, "Google now reports " + who.email());
         }
         members.touchLogin(m.id(), who.name(), now);
 
-        String token = InviteTokens.generate(random); // same 256-bit URL-safe generator
+        byte[] raw = new byte[32]; // 256 random bits, URL-safe
+        random.nextBytes(raw);
+        String token = Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
         OffsetDateTime expires = now.plusHours(sessionHours);
         sessions.insert(m.id(), Hashing.sha256(token), expires, userAgent, ip);
         audit.log("MEMBER", String.valueOf(m.id()), "SIGNED_IN", who.email(), ip, null);

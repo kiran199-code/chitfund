@@ -28,7 +28,7 @@ import java.util.Optional;
  * chitfund-service (HTTP 4xx) becomes a PortalException that keeps chitfund-service's own error code and message.
  */
 @Component
-public class HttpChitGroupGateway implements ChitGroupGateway, ChitEnrolmentGateway, ChitPortfolioGateway {
+public class HttpChitGroupGateway implements ChitGroupGateway, ChitEnrolmentGateway, ChitPortfolioGateway, ChitPlanGateway {
 
     private final ObjectMapper mapper;
     private final HttpClient http;
@@ -123,6 +123,13 @@ public class HttpChitGroupGateway implements ChitGroupGateway, ChitEnrolmentGate
         body.put("lienReference", r.lienReference());
         JsonNode n = call("POST", "/api/v1/chit/groups/" + enc(groupCode) + "/tickets", body, idempotencyKey);
         return n.path("ticketNo").asInt();
+    }
+
+    // ---- plan shelf ---------------------------------------------------------------------------------------------------
+
+    @Override
+    public List<ChitPlanGateway.OpenPlan> openPlans() {
+        return list(call("GET", "/api/v1/chit/plans/open", null, null), ChitPlanGateway.OpenPlan.class);
     }
 
     // ---- customer portfolio -------------------------------------------------------------------------------------------------

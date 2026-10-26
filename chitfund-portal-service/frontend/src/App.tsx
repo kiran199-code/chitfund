@@ -90,11 +90,16 @@ export default function App() {
 
 function Who({ member, onSignOut }: { member: Member; onSignOut: () => void }) {
   const name = member.displayName ?? member.email;
+  const initials = name.split(/[ @.]/).filter(Boolean).slice(0, 2).map(x => x.charAt(0).toUpperCase()).join('') || '?';
   return (
     <div className="who">
-      <span className="avatar" title={member.email}>{name.charAt(0).toUpperCase()}</span>
-      <span className="who-name">{name}</span>
-      <button className="link small" onClick={onSignOut}>Sign out</button>
+      <div className="who-chip">
+        <span className="avatar" title={member.email}>{initials}</span>
+        <span className="who-text"><span className="who-name">{name}</span><span className="who-sub"><i /> Signed in</span></span>
+      </div>
+      <button className="signout" onClick={onSignOut}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg> Sign out
+      </button>
     </div>
   );
 }
@@ -111,6 +116,7 @@ function Footer({ site }: { site: Site | null }) {
           </p>
           {site?.officeAddress && <p>{site.officeAddress}</p>}
           <p>Sign-in is handled by Google. No password is stored here.</p>
+          <p className="foot-copy">&copy; {new Date().getFullYear()} {BRAND.name}</p>
         </div>
       </div>
     </footer>
@@ -189,7 +195,6 @@ const VIEWS: [string, string, string][] = [
   ['dashboard', 'Home', 'home'], ['tickets', 'My chits', 'ticket'], ['plans', 'Plans', 'gift'], ['payments', 'Payments', 'rupee'], ['auctions', 'Auctions', 'gavel'],
   ['approvals', 'Waiting on you', 'clock'], ['offers', 'Offers', 'gift'], ['more', 'More', 'more'],
 ];
-const TABS = ['dashboard', 'tickets', 'plans', 'payments', 'more'];
 const NAV = ['dashboard', 'tickets', 'plans', 'payments', 'auctions', 'approvals', 'offers'];
 
 function viewFromHash(): string {
@@ -199,6 +204,7 @@ function viewFromHash(): string {
 
 function Portal({ member, site, onSignOut }: { member: Member; site: Site | null; onSignOut: () => void }) {
   const [view, setView] = useState(viewFromHash);
+  const [menu, setMenu] = useState(false);
   const ov = useLoad<Overview>(api.dashboard);
   const first = useRef(true);
   useEffect(() => {
@@ -230,7 +236,18 @@ function Portal({ member, site, onSignOut }: { member: Member; site: Site | null
             })}
           </nav>
           <Who member={member} onSignOut={onSignOut} />
+          <button className="burger" aria-label="Menu" aria-expanded={menu} onClick={() => setMenu(m => !m)}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+          </button>
         </div>
+        {menu && (
+          <div className="drawer">
+            {NAV.map(k => {
+              const v = VIEWS.find(x => x[0] === k)!;
+              return <a key={k} href={'#/' + k} aria-current={k === view ? 'page' : undefined} onClick={() => setMenu(false)}>{v[1]}{badge(k) > 0 && <span className="count">{badge(k)}</span>}</a>;
+            })}
+          </div>
+        )}
       </header>
       <main className="main">
         <div className="wrap">
@@ -245,18 +262,6 @@ function Portal({ member, site, onSignOut }: { member: Member; site: Site | null
         </div>
       </main>
       <Footer site={site} />
-      <nav className="tabbar" aria-label="Main pages">
-        {TABS.map(k => {
-          const v = VIEWS.find(x => x[0] === k)!;
-          const active = k === view || (k === 'more' && (view === 'approvals' || view === 'offers' || view === 'auctions'));
-          return (
-            <a key={k} href={'#/' + k} aria-current={active ? 'page' : undefined}>
-              <span className="ti"><Icon name={v[2]} size={22} /></span>{v[1]}
-              {badge(k) > 0 && <span className="count">{badge(k)}</span>}
-            </a>
-          );
-        })}
-      </nav>
     </div>
   );
 }

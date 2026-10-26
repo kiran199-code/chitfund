@@ -1,7 +1,7 @@
 package com.chitfund.portal.auth;
 
 import com.chitfund.portal.common.PortalException;
-import com.chitfund.portal.invite.Emails;
+import com.chitfund.portal.common.Emails;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;

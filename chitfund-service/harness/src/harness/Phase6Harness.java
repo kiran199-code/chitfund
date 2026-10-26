@@ -229,6 +229,18 @@ public class Phase6Harness {
         var draftPl = tx(() -> m.createSamplePlans(new com.chitfund.service.maintenance.MaintenanceDtos.SamplePlansRequest(LocalDate.of(2026, 12, 1), false), "admin"));
         eq("draft run", "DRAFT", draftPl.plans().get(5).status());
         check("draft run continues numbering", !draftPl.plans().get(0).groupCode().equals(pl.plans().get(0).groupCode()));
+        // the plan shelf feed and the listing labels
+        com.chitfund.service.listing.ListingService listing = new com.chitfund.service.listing.ListingService(new com.chitfund.service.listing.ListingRepository(jdbc), new Audit(jdbc));
+        var open = listing.openPlans();
+        check("open plans include the 12 opened samples", open.stream().filter(x -> x.planCategory() != null).count() >= 12);
+        var edu = open.stream().filter(x -> "EDUCATION".equals(x.planCategory())).findFirst().orElseThrow();
+        eq("seats left is all tickets when nobody enrolled", edu.ticketCount(), edu.seatsLeft());
+        check("draft plans are not on the shelf", open.stream().noneMatch(x -> x.groupCode().equals(draftPl.plans().get(0).groupCode())));
+        tx(() -> listing.set(edu.groupCode(), new com.chitfund.service.listing.ListingService.ListingRequest(" home ", "Medak", ""), "admin"));
+        eq("category upper-cased", "HOME", listing.openPlans().stream().filter(x -> x.groupCode().equals(edu.groupCode())).findFirst().orElseThrow().planCategory());
+        eq("blank clears the state", null, listing.openPlans().stream().filter(x -> x.groupCode().equals(edu.groupCode())).findFirst().orElseThrow().state());
+        refused("bad category", "VALIDATION_FAILED", () -> listing.set(edu.groupCode(), new com.chitfund.service.listing.ListingService.ListingRequest("FUN", null, null), "admin"));
+        refused("unknown group", "NOT_FOUND", () -> listing.set("NOPE-1", new com.chitfund.service.listing.ListingService.ListingRequest("HOME", null, null), "admin"));
         refused("plans switch off", "RESET_DISABLED", () -> off.createSamplePlans(new com.chitfund.service.maintenance.MaintenanceDtos.SamplePlansRequest(LocalDate.of(2026, 12, 1), true), "admin"));
     }
 
