@@ -77,6 +77,12 @@ export interface MaintenanceStatus {
   businessDateMode: string | null;
   batch: MaintenanceBatch;
 }
+export interface SamplePlansResult {
+  plans: { groupCode: string; category: string; name: string; branch: string; state: string; chitValue: number; ticketCount: number; subscription: number; status: string }[];
+  startDate: string;
+  message: string;
+}
+
 export interface SampleGroupsResult {
   groupCodes: string[];
   chitValue: number;

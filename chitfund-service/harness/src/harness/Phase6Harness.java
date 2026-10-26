@@ -194,7 +194,7 @@ public class Phase6Harness {
         if (only.isEmpty() || only.equals("transfer")) Scenarios.transfers();
         if (only.isEmpty() || only.equals("recovery")) Scenarios.recovery();
         if (only.isEmpty() || only.equals("prize")) Scenarios.prize();
-        if (only.isEmpty() || only.equals("sample")) sampleGroups();
+        if (only.isEmpty() || only.equals("sample")) sampleGroups(); if (only.isEmpty() || only.equals("sample")) samplePlans();
         if (only.isEmpty() || only.equals("customer")) customers();
         if (only.isEmpty() || only.equals("portfolio")) PortfolioScenario.run();
         System.out.println("\n" + passed + " passed, " + failed + " failed (" + jdbc.statements + " statements)");
@@ -215,6 +215,23 @@ public class Phase6Harness {
         check("a case is open", p.caseId() != null);
         ledgerIdentities("smoke", code);
     }
+
+    static void samplePlans() {
+        System.out.println("== maintenance: sample plans");
+        com.chitfund.service.maintenance.MaintenanceService m = new com.chitfund.service.maintenance.MaintenanceService(jdbc, null, groupSvc, true);
+        com.chitfund.service.maintenance.MaintenanceService off = new com.chitfund.service.maintenance.MaintenanceService(jdbc, null, groupSvc, false);
+        var pl = tx(() -> m.createSamplePlans(new com.chitfund.service.maintenance.MaintenanceDtos.SamplePlansRequest(LocalDate.of(2026, 12, 1), true), "admin"));
+        eq("twelve plans", 12, pl.plans().size());
+        check("plans numbered after the existing ones", pl.plans().get(0).groupCode().startsWith("SAMPLE-"));
+        eq("two per category", 2L, jdbc.queryForObject("SELECT count(*) FROM chit_group WHERE plan_category = 'WEDDING' AND status = 'OPEN_FOR_ENROLMENT'", Long.class));
+        eq("all open", 12L, jdbc.queryForObject("SELECT count(*) FROM chit_group WHERE plan_category IS NOT NULL AND status = 'OPEN_FOR_ENROLMENT' AND branch IS NOT NULL AND state = 'Telangana'", Long.class));
+        eq("first plan name", "Education Plan 10 lakh, Siddipet", groupSvc.get(pl.plans().get(0).groupCode()).name());
+        var draftPl = tx(() -> m.createSamplePlans(new com.chitfund.service.maintenance.MaintenanceDtos.SamplePlansRequest(LocalDate.of(2026, 12, 1), false), "admin"));
+        eq("draft run", "DRAFT", draftPl.plans().get(5).status());
+        check("draft run continues numbering", !draftPl.plans().get(0).groupCode().equals(pl.plans().get(0).groupCode()));
+        refused("plans switch off", "RESET_DISABLED", () -> off.createSamplePlans(new com.chitfund.service.maintenance.MaintenanceDtos.SamplePlansRequest(LocalDate.of(2026, 12, 1), true), "admin"));
+    }
+
 
     static void sampleGroups() {
         System.out.println("== maintenance: sample groups");

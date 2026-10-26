@@ -48,4 +48,12 @@ public class MaintenanceController {
     public JsonNode sampleGroups(@RequestBody Map<String, Object> body, Principal user) {
         return service.createSampleGroups(body, user == null ? null : user.getName());
     }
+
+    @Operation(summary = "Create two sample groups of each plan type (12 in all): startDate, openForEnrolment (non-production only)",
+            description = "Passed to chitfund-service, which refuses with 403 unless it runs with CHIT_RESET_ENABLED=true. Education, Home, Wedding, "
+                    + "Short term, Retirement and Business plans, two each, with plan category, branch and state.")
+    @PostMapping("/sample-plans")
+    public JsonNode samplePlans(@RequestBody Map<String, Object> body, Principal user) {
+        return service.createSamplePlans(body, user == null ? null : user.getName());
+    }
 }

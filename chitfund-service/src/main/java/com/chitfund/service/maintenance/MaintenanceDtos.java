@@ -29,4 +29,15 @@ public final class MaintenanceDtos {
     public record SampleGroupsResult(List<String> groupCodes, BigDecimal chitValue, int ticketCount, BigDecimal subscription, LocalDate startDate,
                                      String createdBy, String message) {
     }
+
+    /** Two groups of each plan type. {@code openForEnrolment} also opens them, so they show on the customer portal. */
+    public record SamplePlansRequest(LocalDate startDate, Boolean openForEnrolment) {
+    }
+
+    public record SamplePlanCreated(String groupCode, String category, String name, String branch, String state, BigDecimal chitValue,
+                                    int ticketCount, BigDecimal subscription, String status) {
+    }
+
+    public record SamplePlansResult(List<SamplePlanCreated> plans, LocalDate startDate, String createdBy, String message) {
+    }
 }

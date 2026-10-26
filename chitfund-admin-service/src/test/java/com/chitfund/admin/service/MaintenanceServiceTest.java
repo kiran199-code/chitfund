@@ -190,4 +190,18 @@ class MaintenanceServiceTest {
         assertThat(chit.calls.get(0).actor()).isEqualTo("admin");
         assertThat(chit.calls.get(0).body()).isEqualTo(body);
     }
+
+    @Test
+    void samplePlansAreRequestedFromTheChitServiceWithTheActor() {
+        chit.answer(HttpMethod.POST, "/maintenance/sample-plans", "{\"plans\":[{\"groupCode\":\"SAMPLE-001\"}],\"message\":\"12 sample plans created\"}");
+        java.util.Map<String, Object> body = java.util.Map.of("startDate", "2026-12-01", "openForEnrolment", true);
+
+        JsonNode r = service.createSamplePlans(body, "admin");
+
+        assertThat(r.path("plans").get(0).path("groupCode").asText()).isEqualTo("SAMPLE-001");
+        assertThat(chit.calls).hasSize(1);
+        assertThat(chit.calls.get(0).path()).isEqualTo("/maintenance/sample-plans");
+        assertThat(chit.calls.get(0).actor()).isEqualTo("admin");
+        assertThat(chit.calls.get(0).body()).isEqualTo(body);
+    }
 }

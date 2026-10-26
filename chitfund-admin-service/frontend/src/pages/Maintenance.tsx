@@ -4,7 +4,7 @@ import DataTable, { Col } from '../components/DataTable';
 import { Badge, Card, ErrorBox, Loading, PageHeader } from '../components/ui';
 import { count, date } from '../format';
 import { useLoad } from '../hooks';
-import type { ClearDataResult, MaintenanceStatus, SampleGroupsResult } from '../types';
+import type { ClearDataResult, MaintenanceStatus, SampleGroupsResult, SamplePlansResult } from '../types';
 
 const TABLE_NAMES: Record<string, string> = {
   chit_group: 'Chit groups',
@@ -81,6 +81,7 @@ export default function Maintenance() {
       {notice && <div className={`banner banner-${notice.tone}`} role="status">{notice.text}</div>}
       {loading && !data && <Loading />}
       {error && <ErrorBox message={error} onRetry={reload} />}
+      {data && <SamplePlansCard enabled={data.resetEnabled} businessDate={data.businessDate} onDone={text => { setNotice({ tone: 'good', text }); reload(); }} />}
       {data && <SampleGroupsCard enabled={data.resetEnabled} businessDate={data.businessDate} onDone={text => { setNotice({ tone: 'good', text }); reload(); }} />}
       {data && (
         <section className="card danger-zone">
@@ -220,6 +221,56 @@ function SampleGroupsCard({ enabled, businessDate, onDone }: { enabled: boolean;
         {Number.isFinite(perTicket) && <p className="muted">Subscription per ticket: Rs {perTicket.toLocaleString('en-IN', { maximumFractionDigits: 2 })}. The chit value must divide evenly by the tickets.</p>}
         {err && <div className="banner banner-bad" role="alert">{err}</div>}
         <button type="submit" className="btn" disabled={!enabled || !valid || busy}>{busy ? 'Creating...' : 'Create sample groups'}</button>
+      </form>
+    </section>
+  );
+}
+
+function SamplePlansCard({ enabled, businessDate, onDone }: { enabled: boolean; businessDate: string | null; onDone: (text: string) => void }) {
+  const [startDate, setStartDate] = useState(() => nextMonthStart(businessDate));
+  const [open, setOpen] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!startDate || busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await send<SamplePlansResult>('POST', '/maintenance/sample-plans', { startDate, openForEnrolment: open });
+      onDone(r.message);
+    } catch (ex) {
+      setErr(ex instanceof Error ? ex.message : String(ex));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="card">
+      <header className="card-head"><h3>Create plan samples (two of each type)</h3></header>
+      <p className="muted">
+        Makes 12 new groups with the next free SAMPLE-nnn numbers: two each of Education, Home, Wedding, Short term, Retirement and Business plans,
+        with different chit values, tickets, branches and the state Telangana. These are test values, not real products. The rules are the same as
+        for sample groups: monthly, instalment due on the 5th, auction on the 10th, 5% commission, 5 to 40% discount, no fees.
+      </p>
+      {!enabled && (
+        <div className="banner banner-warn">
+          Switched off on chitfund-service. Set CHIT_RESET_ENABLED=true on it (Render: Environment tab) and redeploy to allow it.
+        </div>
+      )}
+      <form onSubmit={submit}>
+        <div className="form-grid">
+          <label className="field"><span>Start date</span>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} disabled={!enabled || busy} /></label>
+        </div>
+        <label className="check" style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0 12px' }}>
+          <input type="checkbox" checked={open} onChange={e => setOpen(e.target.checked)} disabled={!enabled || busy} />
+          <span>Open them for enrolment, so they show on the customer portal</span>
+        </label>
+        {err && <div className="banner banner-bad" role="alert">{err}</div>}
+        <button type="submit" className="btn" disabled={!enabled || !startDate || busy}>{busy ? 'Creating...' : 'Create 12 plan samples'}</button>
       </form>
     </section>
   );

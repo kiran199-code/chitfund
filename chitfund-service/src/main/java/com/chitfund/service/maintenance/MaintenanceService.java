@@ -7,6 +7,9 @@ import com.chitfund.service.group.GroupService;
 import com.chitfund.service.maintenance.MaintenanceDtos.ClearResult;
 import com.chitfund.service.maintenance.MaintenanceDtos.SampleGroupsRequest;
 import com.chitfund.service.maintenance.MaintenanceDtos.SampleGroupsResult;
+import com.chitfund.service.maintenance.MaintenanceDtos.SamplePlanCreated;
+import com.chitfund.service.maintenance.MaintenanceDtos.SamplePlansRequest;
+import com.chitfund.service.maintenance.MaintenanceDtos.SamplePlansResult;
 import com.chitfund.service.maintenance.MaintenanceDtos.StatusView;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -106,6 +109,44 @@ public class MaintenanceService {
         log.warn("SAMPLE GROUPS created by {}: {}", who, codes);
         return new SampleGroupsResult(codes, req.chitValue(), req.ticketCount(), sub, req.startDate(), who,
                 codes.size() + " sample group(s) created in DRAFT: " + String.join(", ", codes) + ".");
+    }
+
+    /**
+     * Makes the 12 sample plans (two of each type, see {@link SamplePlans}) as SAMPLE-nnn groups with plan category, branch and state set,
+     * and optionally opens them for enrolment. Same switch as the clear. All or none: one transaction.
+     */
+    @Transactional
+    public SamplePlansResult createSamplePlans(SamplePlansRequest req, String actor) {
+        if (!resetEnabled) {
+            throw ChitException.forbidden("RESET_DISABLED",
+                    "Creating sample data is switched off on this chitfund-service. Set CHIT_RESET_ENABLED=true to allow it "
+                            + "(non-production environments only).");
+        }
+        if (req == null || req.startDate() == null) {
+            throw ChitException.badRequest("VALIDATION_FAILED", "startDate is required");
+        }
+        boolean open = Boolean.TRUE.equals(req.openForEnrolment());
+        String who = actor == null || actor.isBlank() ? "unknown" : actor.trim();
+        int next = SampleGroups.nextNumber(jdbc.query("SELECT group_code FROM chit_group WHERE group_code LIKE 'SAMPLE-%'", (rs, i) -> rs.getString(1)));
+        List<SamplePlanCreated> made = new ArrayList<>();
+        for (SamplePlans.Plan p : SamplePlans.ALL) {
+            SampleGroups.validate(1, p.chitValue(), p.tickets(), req.startDate());
+            String code = SampleGroups.code(next++);
+            String name = SamplePlans.name(p);
+            groups.create(new CreateGroupRequest(code, name, "SAMPLE-FOREMAN", SampleGroups.rules(p.chitValue(), p.tickets(), req.startDate())),
+                    "sample-" + UUID.randomUUID(), who);
+            jdbc.update("UPDATE chit_group SET plan_category = ?, branch = ?, state = ? WHERE group_code = ?", p.category(), p.branch(), p.state(), code);
+            String status = "DRAFT";
+            if (open) {
+                groups.openEnrolment(code, "sample-open-" + UUID.randomUUID(), who);
+                status = "OPEN_FOR_ENROLMENT";
+            }
+            made.add(new SamplePlanCreated(code, p.category(), name, p.branch(), p.state(), p.chitValue(), p.tickets(),
+                    SampleGroups.subscription(p.chitValue(), p.tickets()), status));
+        }
+        log.warn("SAMPLE PLANS created by {}: {}", who, made.stream().map(SamplePlanCreated::groupCode).toList());
+        return new SamplePlansResult(made, req.startDate(), who, made.size() + " sample plans created (two of each type), "
+                + (open ? "open for enrolment" : "in DRAFT") + ": " + made.get(0).groupCode() + " to " + made.get(made.size() - 1).groupCode() + ".");
     }
 
     private Map<String, Long> rowCounts() {

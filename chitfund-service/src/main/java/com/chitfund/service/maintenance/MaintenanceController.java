@@ -5,6 +5,8 @@ import com.chitfund.service.maintenance.MaintenanceDtos.ClearRequest;
 import com.chitfund.service.maintenance.MaintenanceDtos.ClearResult;
 import com.chitfund.service.maintenance.MaintenanceDtos.SampleGroupsRequest;
 import com.chitfund.service.maintenance.MaintenanceDtos.SampleGroupsResult;
+import com.chitfund.service.maintenance.MaintenanceDtos.SamplePlansRequest;
+import com.chitfund.service.maintenance.MaintenanceDtos.SamplePlansResult;
 import com.chitfund.service.maintenance.MaintenanceDtos.StatusView;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -49,5 +51,14 @@ public class MaintenanceController {
     public SampleGroupsResult sampleGroups(@RequestBody(required = false) SampleGroupsRequest request,
                                            @RequestHeader(value = "X-Actor", required = false) String actor) {
         return service.createSampleGroups(request, Actor.orService(actor));
+    }
+
+    @PostMapping("/sample-plans")
+    @Operation(summary = "Create two sample groups of each plan type (12 in all) (chit.maintenance.reset)",
+            description = "Body {startDate, openForEnrolment}. Education, Home, Wedding, Short term, Retirement and Business, two each, with plan category, "
+                    + "branch and state set. Refused (403 RESET_DISABLED) unless CHIT_RESET_ENABLED=true.")
+    public SamplePlansResult samplePlans(@RequestBody(required = false) SamplePlansRequest request,
+                                         @RequestHeader(value = "X-Actor", required = false) String actor) {
+        return service.createSamplePlans(request, Actor.orService(actor));
     }
 }

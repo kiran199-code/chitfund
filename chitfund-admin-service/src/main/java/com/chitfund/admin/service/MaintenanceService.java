@@ -117,6 +117,11 @@ public class MaintenanceService {
         return chit.exchange(HttpMethod.POST, "/maintenance/sample-groups", Map.of(), body, actor, null);
     }
 
+    /** Asks chitfund-service to create the 12 sample plans (two of each type). */
+    public JsonNode createSamplePlans(Map<String, Object> body, String actor) {
+        return chit.exchange(HttpMethod.POST, "/maintenance/sample-plans", Map.of(), body, actor, null);
+    }
+
     private static ObjectNode asObject(JsonNode n) {
         if (n instanceof ObjectNode o) {
             return o;
