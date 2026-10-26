@@ -137,3 +137,9 @@ Built and screenshot-checked with a mocked API: public plan browser (state picke
 register pages (Google only), signed-in "Plans" page with a join-request confirmation and "My join requests". Invite page removed from the web app.
 NOT built yet (the screens call these, they do not exist): GET /plans/public, GET/POST /me/join-requests, POST /me/join-requests/{id}/withdraw,
 category/branch/state columns on chit_group, admin screens to approve join requests, and removal of the invite feature from portal and admin services.
+
+## Plan photos (Oct 2026)
+Each plan card shows a photo for its type, taken from the six Unsplash links in the supplied honest_savers_portal.html (PLAN_PHOTO in plans.tsx).
+They are hot-linked, so visitors' browsers contact images.unsplash.com. If a photo fails to load, the card shows a dark backdrop with the category icon.
+NOT verified: that the six links load or show what the file's author intended (the sandbox and the device could not reach Unsplash; layout was checked with stand-in images).
+To serve them from the portal instead, save six files under frontend/public/plans/ and point PLAN_PHOTO at /plans/<type>.jpg.

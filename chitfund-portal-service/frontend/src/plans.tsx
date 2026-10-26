@@ -24,6 +24,30 @@ function CatIcon({ k }: { k: string }) {
   return <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{p[k]}</svg>;
 }
 
+// Photos for each plan type (Unsplash). If one cannot load, the card shows a plain coloured backdrop instead.
+const unsplash = (id: string) => `https://images.unsplash.com/photo-${id}?q=80&w=800&auto=format&fit=crop`;
+export const PLAN_PHOTO: Record<string, string> = {
+  EDUCATION: unsplash('1523050854058-8df90110c9f1'),
+  HOME: unsplash('1600585154340-be6161a56a0c'),
+  WEDDING: unsplash('1519741497674-611481863552'),
+  SHORT_TERM: unsplash('1559526324-4b87b5e36e44'),
+  RETIREMENT: unsplash('1507525428034-b723cf961d3e'),
+  BUSINESS: unsplash('1486406146926-c627a92ad1ab'),
+};
+const catLabel = (k: string) => CATEGORIES.find(c => c[0] === k)?.[1] ?? 'Plan';
+
+function PlanPic({ category }: { category: string }) {
+  const [bad, setBad] = useState(false);
+  const src = PLAN_PHOTO[category];
+  return (
+    <div className="plan-pic">
+      {src && !bad && <img src={src} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setBad(true)} />}
+      {(!src || bad) && <span className="plan-pic-icon"><CatIcon k={category in PLAN_PHOTO ? category : 'ALL'} /></span>}
+      <span className="plan-pic-tag">{catLabel(category)}</span>
+    </div>
+  );
+}
+
 const freq = (f: string) => (f === 'WEEKLY' ? 'week' : f === 'FORTNIGHTLY' ? 'fortnight' : 'month');
 const freqPlural = (f: string) => (f === 'WEEKLY' ? 'weeks' : f === 'FORTNIGHTLY' ? 'fortnights' : 'months');
 
@@ -31,6 +55,8 @@ export function PlanCard({ plan, onInvest, label, disabled }: { plan: Plan; onIn
   const full = plan.seatsLeft <= 0;
   return (
     <article className="plan">
+      <PlanPic category={plan.category} />
+      <div className="plan-body">
       <div className="plan-chips"><span className="pchip pchip-red">{plan.state}</span><span className="pchip">{plan.branch}</span></div>
       <h3 className="plan-name">{plan.name}</h3>
       <div className="plan-value">{rupees(plan.chitValue)}</div>
@@ -42,6 +68,7 @@ export function PlanCard({ plan, onInvest, label, disabled }: { plan: Plan; onIn
         <span>Starts {dateOnly(plan.startDate)}</span>
       </div>
       <button className="btn plan-btn" onClick={() => onInvest(plan)} disabled={full || disabled}>{label ?? 'Invest now'}</button>
+      </div>
     </article>
   );
 }
