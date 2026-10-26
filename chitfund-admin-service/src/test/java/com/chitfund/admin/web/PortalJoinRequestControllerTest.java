@@ -16,6 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Spring-free: seat-request decisions go to the portal service under the right path and acting name; bad input is refused first. */
+@SuppressWarnings("unchecked")
 class PortalJoinRequestControllerTest {
 
     record Call(HttpMethod method, String path, Map<String, Object> query, Object body, String actor) {}
@@ -61,9 +62,9 @@ class PortalJoinRequestControllerTest {
         assertThat(portal.calls.get(0).query()).isEmpty();
         assertThat(portal.calls.get(1).query()).containsEntry("status", "PENDING");
         assertThat(portal.calls.get(2).actor()).isEqualTo("ravi");
-        assertThat((Map<?, ?>) portal.calls.get(2).body()).containsEntry("note", "KYC done");
+        assertThat((Map<String, Object>) portal.calls.get(2).body()).containsEntry("note", "KYC done");
         assertThat(portal.calls.get(3).actor()).isEqualTo("chit-ops");
-        assertThat((Map<?, ?>) portal.calls.get(3).body()).isEmpty();
+        assertThat((Map<String, Object>) portal.calls.get(3).body()).isEmpty();
     }
 
     @Test
