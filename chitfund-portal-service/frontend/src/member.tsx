@@ -72,9 +72,9 @@ export function NoAccount({ email, onSignOut }: { email?: string; onSignOut?: ()
       <h1 style={{ marginTop: 14 }}>Your passbook is empty for now</h1>
       <p>This Google account does not have any chit tickets yet.</p>
       <p className="muted">
-        If your organiser invited you, open the link in the invitation e-mail and accept it.
-        {email ? <> Make sure it was sent to <strong>{email}</strong>.</> : ' Make sure it was sent to the address you signed in with.'}
+        Choose a plan and send a request. Once our team confirms your seat, your chit shows up here{email ? <> under <strong>{email}</strong></> : ''}.
       </p>
+      <a className="btn" href="#/plans" style={{ marginBottom: 10 }}>Browse plans</a>{' '}
       {onSignOut && <button className="btn btn-ghost" onClick={onSignOut}>Sign out and use another account</button>}
     </section>
   );
@@ -649,6 +649,7 @@ export function More({ name, email, site, count, go, onSignOut }: { name: string
       <div className="card" style={{ padding: '0 16px' }}>
         <ul className="rows">
           <li className="row"><button className="link" style={{ textDecoration: 'none', color: 'var(--ink)' }} onClick={() => go('approvals')}>Waiting on you</button>{count.requests > 0 && <span className="count">{count.requests}</span>}</li>
+          <li className="row"><button className="link" style={{ textDecoration: 'none', color: 'var(--ink)' }} onClick={() => go('auctions')}>Auctions</button><Icon name="arrow" size={18} /></li>
           <li className="row"><button className="link" style={{ textDecoration: 'none', color: 'var(--ink)' }} onClick={() => go('offers')}>Offers</button>{count.offers > 0 && <span className="count">{count.offers}</span>}</li>
           <li className="row"><button className="link" style={{ textDecoration: 'none', color: 'var(--ink)' }} onClick={() => go('payments')}>How to pay</button><Icon name="arrow" size={18} /></li>
           {tel && <li className="row"><a href={`tel:${tel}`} style={{ color: 'var(--ink)', fontWeight: 700, textDecoration: 'none' }}>Call my organiser</a><span className="muted">{site?.helpPhone}</span></li>}

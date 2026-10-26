@@ -131,3 +131,9 @@ Online payments, member approve/reject workflow, notifications and batch reminde
 - Customer web app re-themed: black header and hero, red accents, grey page, white cards. Logo redrawn in red and grey; all illustrations redrawn with gradients, skyline, bunting and patterns (frontend/src/brand.tsx, styles.css, index.html).
 - Verified: typecheck, production build, screenshots (desktop and phone, mocked API). Not verified: Archivo font in a real browser (Google Fonts blocked in sandbox), real photos (none supplied; offers still take a picture link).
 - Status colours: good = black, bad/overdue = red, warning = grey outline (no green, to keep the four-colour theme).
+
+## Plans shelf, split sign-in and register (Oct 2026, front end only)
+Built and screenshot-checked with a mocked API: public plan browser (state picker, category tabs, scrolling cards, Invest now), split sign-in and
+register pages (Google only), signed-in "Plans" page with a join-request confirmation and "My join requests". Invite page removed from the web app.
+NOT built yet (the screens call these, they do not exist): GET /plans/public, GET/POST /me/join-requests, POST /me/join-requests/{id}/withdraw,
+category/branch/state columns on chit_group, admin screens to approve join requests, and removal of the invite feature from portal and admin services.

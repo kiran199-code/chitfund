@@ -109,6 +109,13 @@ export interface Overview {
   summary: { ticketsHeld: number; nextPayment?: Due; overdueCount: number; overdueTotal: number; liveAuctions: number; upcomingAuctions: number; openRequests: number };
   nextPayments: Due[]; auctions: Auction[]; requests: MemberRequest[]; offers: Offer[]; tickets: Ticket[];
 }
+export interface Plan {
+  groupCode: string; name: string; category: string; branch: string; state: string; chitValue: number; subscription: number; cycles: number;
+  frequency: string; tickets: number; seatsLeft: number; startDate: string;
+}
+export interface JoinRequest {
+  id: number; groupCode: string; groupName: string; tickets: number; status: 'PENDING' | 'APPROVED' | 'DECLINED' | 'WITHDRAWN'; requestedAt: string; note?: string;
+}
 export interface BidResult { bidSeq: number; auctions: Auction[] }
 
 export const api = {
@@ -123,6 +130,10 @@ export const api = {
     call<BidResult>('POST', '/me/bids', b, { 'Idempotency-Key': key }),
   withdrawBid: (b: { groupCode: string; cycleNo: number; bidSeq: number; reason?: string }, key: string) =>
     call<BidResult>('POST', '/me/bids/withdraw', b, { 'Idempotency-Key': key }),
+  plans: () => call<Plan[]>('GET', '/plans/public'),
+  joinRequests: () => call<JoinRequest[]>('GET', '/me/join-requests'),
+  requestJoin: (b: { groupCode: string; tickets: number }, key: string) => call<JoinRequest>('POST', '/me/join-requests', b, { 'Idempotency-Key': key }),
+  withdrawJoin: (id: number) => call<JoinRequest>('POST', `/me/join-requests/${id}/withdraw`, {}),
   config: () => call<PortalConfig>('GET', '/config'),
   me: () => call<Member>('GET', '/me'),
   signIn: (idToken: string) => call<Member>('POST', '/auth/google', { idToken }),
