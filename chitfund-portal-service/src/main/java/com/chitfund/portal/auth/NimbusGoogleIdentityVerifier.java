@@ -2,6 +2,7 @@ package com.chitfund.portal.auth;
 
 import com.chitfund.portal.common.PortalException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtException;
@@ -14,12 +15,15 @@ import java.time.OffsetDateTime;
  * Verifies the signature of a Google ID token against Google's published signing keys (the JWK set URL in
  * {@code chit.portal.google.jwk-set-uri}) using Spring Security's Nimbus decoder, then applies {@link GoogleClaimsPolicy}.
  *
+ * <p>Not present when the {@code e2e} profile is on: the test service then uses {@link TestIdentityVerifier} instead.
+ *
  * <p>VERIFY BEFORE USE: the decoder calls below ({@code NimbusJwtDecoder.withJwkSetUri(..).build()}, {@code decode}, {@code getClaims})
  * are written from memory of Spring Security 6 and have only been compiled against a stand-in, never run against Google. Google's key
  * URL and the token claims also need confirming in Google's current documentation. The decoder's default validation covers the
  * token's time window; issuer and audience are checked here.
  */
 @Component
+@Profile("!e2e")
 public class NimbusGoogleIdentityVerifier implements GoogleIdentityVerifier {
 
     private final String clientId;
