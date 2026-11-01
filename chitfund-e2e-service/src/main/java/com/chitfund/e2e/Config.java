@@ -20,17 +20,23 @@ public final class Config {
     public final int port;
 
     public Config(Map<String, String> env) {
-        chitUrl = trimSlash(env.getOrDefault("CHIT_SERVICE_URL", ""));
-        chitUser = env.getOrDefault("CHIT_SERVICE_USERNAME", "chit-service");
-        chitPassword = env.getOrDefault("CHIT_SERVICE_PASSWORD", "");
-        portalUrl = trimSlash(env.getOrDefault("PORTAL_SERVICE_URL", ""));
-        portalOrigin = trimSlash(env.getOrDefault("PORTAL_ORIGIN", portalUrl));
-        portalAdminUser = env.getOrDefault("PORTAL_ADMIN_USERNAME", "portal-admin");
-        portalAdminPassword = env.getOrDefault("PORTAL_ADMIN_PASSWORD", "");
-        uiUser = env.getOrDefault("E2E_UI_USERNAME", "e2e");
-        uiPassword = env.getOrDefault("E2E_UI_PASSWORD", "");
-        testEnvironment = "true".equalsIgnoreCase(env.getOrDefault("E2E_TEST_ENV", "false"));
-        port = Integer.parseInt(env.getOrDefault("PORT", "8090"));
+        chitUrl = trimSlash(val(env, "CHIT_SERVICE_URL", ""));
+        chitUser = val(env, "CHIT_SERVICE_USERNAME", "chit-service");
+        chitPassword = val(env, "CHIT_SERVICE_PASSWORD", "");
+        portalUrl = trimSlash(val(env, "PORTAL_SERVICE_URL", ""));
+        portalOrigin = trimSlash(val(env, "PORTAL_ORIGIN", portalUrl));
+        portalAdminUser = val(env, "PORTAL_ADMIN_USERNAME", "portal-admin");
+        portalAdminPassword = val(env, "PORTAL_ADMIN_PASSWORD", "");
+        uiUser = val(env, "E2E_UI_USERNAME", "e2e");
+        uiPassword = val(env, "E2E_UI_PASSWORD", "");
+        testEnvironment = "true".equalsIgnoreCase(val(env, "E2E_TEST_ENV", "false"));
+        port = Integer.parseInt(val(env, "PORT", "8090"));
+    }
+
+    /** A variable that is missing or blank (as a Render "sync: false" value can be) takes the default. */
+    private static String val(Map<String, String> env, String key, String def) {
+        String v = env.get(key);
+        return v == null || v.isBlank() ? def : v;
     }
 
     private static String trimSlash(String s) {

@@ -61,6 +61,14 @@ class OptionsReportConfigTest {
     }
 
     @Test
+    void blankSettingsTakeTheDefaults() {
+        Config c = new Config(Map.of("PORTAL_SERVICE_URL", "http://b", "PORTAL_ORIGIN", " ", "PORT", "", "E2E_UI_USERNAME", ""));
+        assertEquals("http://b", c.portalOrigin);
+        assertEquals(8090, c.port);
+        assertEquals("e2e", c.uiUser);
+    }
+
+    @Test
     void configRefusesAnUnsafeOrIncompleteSetup() {
         Config c = new Config(Map.of());
         String all = String.join(" ", c.problems());

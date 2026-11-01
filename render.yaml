@@ -147,66 +147,45 @@ services:
         value: batch-admin
       - key: BATCH_ADMIN_PASSWORD
         fromService: { type: web, name: chitfund-batch-service, envVarKey: BATCH_ADMIN_PASSWORD }
-      # The customer portal, for "Invite by e-mail" on a group's enrolment screen. Public address, no trailing slash.
-      - key: PORTAL_SERVICE_URL
-        sync: false
-      - key: PORTAL_ADMIN_USERNAME
-        value: portal-admin
-      - key: PORTAL_ADMIN_PASSWORD
-        fromService: { type: web, name: chitfund-portal-service, envVarKey: PORTAL_ADMIN_PASSWORD }
       - key: JAVA_TOOL_OPTIONS
         value: "-Xmx256m -Xss512k -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
 
-  # ---- chitfund-portal-service: customer-facing API (invitations, Google sign-in) --------------------------------------
-  # Same database as the others; it creates its own "portal" schema on first start. There is no customer web UI yet: the
-  # invite links point at PORTAL_BASE_URL/invite/<token>, which needs the portal web app (not built) to exist.
+  # ---- chitfund-e2e-service: end-to-end test runner (page + API), no database ----------------------------------------
+  # TEST ENVIRONMENTS ONLY. A run can clear all chit data and moves the business date forward. It talks to chitfund-service
+  # and to a chitfund-portal-service started with SPRING_PROFILES_ACTIVE=e2e (mock sign-in, real Google sign-in OFF), so point
+  # PORTAL_SERVICE_URL at a separate test portal, never at the portal your customers use. The portal is not part of this
+  # Blueprint: create it by hand (or add it) and give it PORTAL_ADMIN_PASSWORD, which you paste here.
+  # Delete this block if you do not want the test runner deployed.
   - type: web
-    name: chitfund-portal-service
+    name: chitfund-e2e-service
     runtime: docker
     plan: free
     region: singapore
-    dockerfilePath: ./chitfund-portal-service/Dockerfile
-    dockerContext: ./chitfund-portal-service
-    healthCheckPath: /actuator/health
+    dockerfilePath: ./chitfund-e2e-service/Dockerfile
+    dockerContext: ./chitfund-e2e-service
+    healthCheckPath: /health
     envVars:
       - key: PORT
         value: "10000"
-      - key: DB_HOST
-        sync: false
-      - key: DB_PORT
-        sync: false
-      - key: DB_NAME
-        sync: false
-      - key: DB_USER
-        sync: false
-      - key: DB_PASSWORD
-        sync: false
-      - key: PORTAL_DB_POOL_SIZE
-        value: "5"
-      # Public address of chitfund-service, no trailing slash.
-      - key: CHIT_SERVICE_BASE_URL
-        sync: false
+      - key: E2E_TEST_ENV
+        value: "true"
+      - key: E2E_UI_USERNAME
+        value: e2e
+      - key: E2E_UI_PASSWORD
+        generateValue: true   # sign-in for the runner's page; read it in the Render dashboard > Environment
+      - key: CHIT_SERVICE_URL
+        sync: false           # public address of chitfund-service, no trailing slash
       - key: CHIT_SERVICE_USERNAME
         value: chit-service
       - key: CHIT_SERVICE_PASSWORD
         fromService: { type: web, name: chitfund-service, envVarKey: CHIT_SERVICE_PASSWORD }
+      - key: PORTAL_SERVICE_URL
+        sync: false           # public address of the TEST portal (e2e profile), no trailing slash
+      - key: PORTAL_ORIGIN
+        sync: false           # the browser origin that portal allows; usually the same address as PORTAL_SERVICE_URL
       - key: PORTAL_ADMIN_USERNAME
         value: portal-admin
       - key: PORTAL_ADMIN_PASSWORD
-        generateValue: true   # read it in the Render dashboard > Environment
-      # Where the customer web app will live; invite links are built from it. Allowed browser origin for the session cookie.
-      - key: PORTAL_BASE_URL
-        sync: false
-      - key: PORTAL_ALLOWED_ORIGINS
-        sync: false
-      # OAuth client id (public, not a secret). The client secret is NOT used by this service and must not be added here.
-      - key: GOOGLE_CLIENT_ID
-        value: 997986872207-87qhdke4mlt30usvaqg72n9fuq0hfboh.apps.googleusercontent.com
-      # CONSOLE logs the invite mail instead of sending it. Switch to SMTP with SMTP_HOST, SMTP_PORT, SMTP_USERNAME,
-      # SMTP_PASSWORD and PORTAL_MAIL_FROM when a mail account exists.
-      - key: PORTAL_MAIL_MODE
-        value: CONSOLE
-      - key: CHIT_TIMEZONE
-        value: Asia/Kolkata
+        sync: false           # the test portal's admin password
       - key: JAVA_TOOL_OPTIONS
         value: "-Xmx256m -Xss512k -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
